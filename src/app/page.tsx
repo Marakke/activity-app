@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { GoogleGenAI } from '@google/genai';
 
 interface ActivityRow {
     id: string;
@@ -17,6 +18,13 @@ export default function Home() {
     const [showAddRow, setShowAddRow] = useState<boolean>(false);
     const [showEmojiPicker, setShowEmojiPicker] = useState<boolean>(false);
     const [isLoading, setIsLoading] = useState<boolean>(true);
+    const [aiAnalysis, setAiAnalysis] = useState<string>('');
+    const [isGeneratingAnalysis, setIsGeneratingAnalysis] = useState<boolean>(false);
+    const [weekCompleted, setWeekCompleted] = useState<boolean>(false);
+    const [lastAnalysisWeek, setLastAnalysisWeek] = useState<string>('');
+
+    // Initialize Gemini AI client
+    const ai = new GoogleGenAI({ apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY ?? '' });
 
     const emojiLibrary = ['🏃', '🚶', '🏋️', '🚴', '🏊', '🏒', '⚽', '🎾', '🥏', '⛷️', '🕺', '🧹', '❓'];
 
@@ -146,6 +154,96 @@ export default function Home() {
         setActivityRows(prev => prev.filter(row => row.id !== rowId));
     };
 
+    // Check if current week is complete (it's Sunday and we have some activities)
+    const checkWeekComplete = () => {
+        const today = new Date();
+        const isSunday = today.getDay() === 0;
+        const hasActivities = activityRows.length > 0;
+        const currentWeekKey = currentWeek[0]?.toISOString().split('T')[0] || '';
+        
+        return isSunday && hasActivities && lastAnalysisWeek !== currentWeekKey;
+    };
+
+    // Generate AI analysis for the week
+    const generateAIAnalysis = async () => {
+        if (!process.env.NEXT_PUBLIC_GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY === 'demo-key') {
+            // Fallback analysis if no API key
+            const totalActivities = getTotalActivities();
+            const activeDays = getActiveDays();
+            const averagePerDay = getAverageActivities();
+            
+            const fallbackAnalysis = `This week you completed ${totalActivities} activities across ${activeDays} days, averaging ${averagePerDay} activities per day. ${
+                activeDays >= 5 ? 'Great consistency!' : 'Keep building those healthy habits!'
+            }`;
+            
+            setAiAnalysis(fallbackAnalysis);
+            return;
+        }
+
+        setIsGeneratingAnalysis(true);
+        
+        try {
+            const weekData = {
+                activities: activityRows.map(row => ({
+                    name: row.name,
+                    emoji: row.emoji,
+                    completedDays: row.completedDays,
+                    totalThisWeek: row.completedDays.length
+                })),
+                weekStats: {
+                    totalActivities: getTotalActivities(),
+                    activeDays: getActiveDays(),
+                    averagePerDay: getAverageActivities()
+                },
+                weekRange: `${currentWeek[0]?.toLocaleDateString()} to ${currentWeek[6]?.toLocaleDateString()}`
+            };
+
+            const prompt = `Analyze this week's activity data and provide a brief, motivational summary (2-3 sentences). Focus on patterns, achievements, and encouragement. Be positive and specific about what they accomplished. Data: ${JSON.stringify(weekData)}`;
+
+            // Use the new Google GenAI SDK
+            const response = await ai.models.generateContent({
+                model: 'gemini-2.0-flash-001',
+                contents: prompt
+            });
+            
+            const analysis = response.text || '';
+
+            setAiAnalysis(analysis);
+            
+            // Cache the analysis
+            const currentWeekKey = currentWeek[0]?.toISOString().split('T')[0] || '';
+            if (analysis) {
+                localStorage.setItem(`ai_analysis_${currentWeekKey}`, analysis);
+                setLastAnalysisWeek(currentWeekKey);
+            }
+            
+        } catch (error) {
+            console.error('Error generating AI analysis:', error);
+            // Fallback to basic analysis
+            const totalActivities = getTotalActivities();
+            const activeDays = getActiveDays();
+            setAiAnalysis(`This week you completed ${totalActivities} activities across ${activeDays} days. Keep up the great work!`);
+        } finally {
+            setIsGeneratingAnalysis(false);
+        }
+    };
+
+    // Complete the week and generate analysis
+    const completeWeek = async () => {
+        await generateAIAnalysis();
+        setWeekCompleted(true);
+    };
+
+    // Load cached analysis on component mount
+    useEffect(() => {
+        const currentWeekKey = currentWeek[0]?.toISOString().split('T')[0] || '';
+        const cachedAnalysis = localStorage.getItem(`ai_analysis_${currentWeekKey}`);
+        if (cachedAnalysis) {
+            setAiAnalysis(cachedAnalysis);
+            setLastAnalysisWeek(currentWeekKey);
+        }
+    }, [currentWeek]);
+
     if (isLoading) {
         return (
             <div className='min-h-screen bg-slate-800 flex items-center justify-center'>
@@ -158,13 +256,13 @@ export default function Home() {
         <div className='min-h-screen bg-slate-800'>
             <div className='container mx-auto px-4 py-4 sm:py-8 max-w-4xl'>
                 {/* Header */}
-                <div className='text-center mb-6 sm:mb-8'>
+                <div className='text-center mb-6'>
                     <h1 className='text-2xl sm:text-4xl font-bold text-white mb-2'>Activity Tracker</h1>
                     <p className='text-white text-sm sm:text-lg'>Track your daily activities and stay motivated!</p>
                 </div>
 
                 {/* Statistics */}
-                <div className='grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-6 sm:mb-8'>
+                <div className='grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-6'>
                     <div className='bg-slate-700 rounded-lg p-4 sm:p-6 shadow-md'>
                         <h3 className='text-sm sm:text-lg font-semibold text-white mb-1 sm:mb-2'>Total Activities</h3>
                         <p className='text-2xl sm:text-3xl font-bold text-blue-400'>{getTotalActivities()}</p>
@@ -178,6 +276,41 @@ export default function Home() {
                         <p className='text-2xl sm:text-3xl font-bold text-purple-400'>{getActiveDays()}</p>
                     </div>
                 </div>
+
+                {/* AI Analysis Section */}
+                {(aiAnalysis || checkWeekComplete()) && (
+                    <div className='bg-slate-700 rounded-lg p-4 sm:p-6 mb-6'>
+                        <div className='flex items-center justify-between mb-4'>
+                            <h3 className='text-lg font-semibold text-white flex items-center'>
+                                🤖 AI Weekly Analysis
+                            </h3>
+                            {checkWeekComplete() && !weekCompleted && (
+                                <button
+                                    onClick={completeWeek}
+                                    disabled={isGeneratingAnalysis}
+                                    className='px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:bg-blue-300 disabled:cursor-not-allowed transition-colors cursor-pointer text-sm font-medium'
+                                >
+                                    {isGeneratingAnalysis ? 'Generating...' : 'Complete Week'}
+                                </button>
+                            )}
+                        </div>
+                        
+                        {isGeneratingAnalysis ? (
+                            <div className='flex items-center space-x-2 text-slate-300'>
+                                <div className='animate-spin rounded-full h-4 w-4 border-b-2 border-purple-400'></div>
+                                <span>Analyzing your week...</span>
+                            </div>
+                        ) : aiAnalysis ? (
+                            <div className='text-slate-200 leading-relaxed'>
+                                {aiAnalysis}
+                            </div>
+                        ) : checkWeekComplete() ? (
+                            <div className='text-slate-300 text-sm'>
+                                Ready to complete your week? Click the button above to get your AI analysis!
+                            </div>
+                        ) : null}
+                    </div>
+                )}
 
                 {/* Activity Tracking Grid */}
                 <div className='bg-slate-700 rounded-lg p-3 sm:p-6 mb-12'>
