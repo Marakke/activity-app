@@ -2,29 +2,23 @@
 
 import { useState, useEffect } from 'react';
 
-interface DayActivity {
-    date: string;
-    count: number;
-}
-
-interface ActivityType {
-    id: string;
-    name: string;
-    color: string;
-}
-
 interface ActivityRow {
     id: string;
     name: string;
-    color: string;
-    activities: DayActivity[];
+    emoji: string;
+    completedDays: string[];
 }
 
 export default function Home() {
     const [activityRows, setActivityRows] = useState<ActivityRow[]>([]);
     const [currentWeek, setCurrentWeek] = useState<Date[]>([]);
     const [newRowName, setNewRowName] = useState<string>('');
+    const [newRowEmoji, setNewRowEmoji] = useState<string>('🏃');
     const [showAddRow, setShowAddRow] = useState<boolean>(false);
+    const [showEmojiPicker, setShowEmojiPicker] = useState<boolean>(false);
+    const [isLoading, setIsLoading] = useState<boolean>(true);
+
+    const emojiLibrary = ['🏃', '🚶', '🏋️', '🚴', '🏊', '🏒', '⚽', '🎾', '🥏', '⛷️', '🕺', '🧹', '❓'];
 
     // Initialize current week dates
     useEffect(() => {
@@ -41,21 +35,26 @@ export default function Home() {
         setCurrentWeek(weekDates);
     }, []);
 
-    // Initialize with default activity row if none exist
+    // Load saved activity rows from localStorage
     useEffect(() => {
         const savedRows = localStorage.getItem('activityRows');
         if (savedRows) {
-            setActivityRows(JSON.parse(savedRows));
+            try {
+                const parsedRows = JSON.parse(savedRows);
+                // Ensure all rows have completedDays array
+                const validRows = parsedRows.map((row: any) => ({
+                    ...row,
+                    completedDays: row.completedDays || [],
+                }));
+                setActivityRows(validRows);
+            } catch (error) {
+                console.error('Error parsing saved rows:', error);
+                setActivityRows([]);
+            }
         } else {
-            // Create default activity row
-            const defaultRow: ActivityRow = {
-                id: 'default',
-                name: 'General',
-                color: 'blue',
-                activities: []
-            };
-            setActivityRows([defaultRow]);
+            setActivityRows([]);
         }
+        setIsLoading(false);
     }, []);
 
     // Save activity rows to localStorage
@@ -65,71 +64,61 @@ export default function Home() {
         }
     }, [activityRows]);
 
-    const getActivityCount = (rowId: string, date: Date): number => {
+    const isActivityCompleted = (rowId: string, date: Date): boolean => {
         const dateStr = date.toISOString().split('T')[0];
         const row = activityRows.find(row => row.id === rowId);
-        if (!row) return 0;
-        const dayActivity = row.activities.find(activity => activity.date === dateStr);
-        return dayActivity ? dayActivity.count : 0;
+        if (!row || !row.completedDays) return false;
+        return row.completedDays.includes(dateStr);
     };
 
-    const updateActivityCount = (rowId: string, date: Date, newCount: number) => {
+    const toggleActivityCompletion = (rowId: string, date: Date) => {
         const dateStr = date.toISOString().split('T')[0];
         setActivityRows(prev => {
             return prev.map(row => {
                 if (row.id === rowId) {
-                    const filtered = row.activities.filter(activity => activity.date !== dateStr);
-                    if (newCount > 0) {
+                    const isCompleted = row.completedDays.includes(dateStr);
+                    if (isCompleted) {
                         return {
                             ...row,
-                            activities: [...filtered, { date: dateStr, count: newCount }]
+                            completedDays: row.completedDays.filter(day => day !== dateStr),
+                        };
+                    } else {
+                        return {
+                            ...row,
+                            completedDays: [...row.completedDays, dateStr],
                         };
                     }
-                    return { ...row, activities: filtered };
                 }
                 return row;
             });
         });
     };
 
-    const incrementActivity = (rowId: string, date: Date) => {
-        const currentCount = getActivityCount(rowId, date);
-        updateActivityCount(rowId, date, currentCount + 1);
-    };
-
-    const decrementActivity = (rowId: string, date: Date) => {
-        const currentCount = getActivityCount(rowId, date);
-        if (currentCount > 0) {
-            updateActivityCount(rowId, date, currentCount - 1);
-        }
-    };
-
     const getTotalActivities = (): number => {
         return activityRows.reduce((total, row) => {
-            return total + row.activities.reduce((rowTotal, activity) => rowTotal + activity.count, 0);
+            return total + (row.completedDays?.length || 0);
         }, 0);
     };
 
     const getAverageActivities = (): number => {
-        const allActivities = activityRows.flatMap(row => row.activities);
-        const daysWithActivities = allActivities.length;
-        return daysWithActivities > 0
-            ? Math.round((getTotalActivities() / daysWithActivities) * 10) / 10
-            : 0;
+        const totalActivities = getTotalActivities();
+        // Only count days up to today (including today)
+        const today = new Date();
+        const daysUpToToday = currentWeek.filter(date => date <= today).length;
+        return daysUpToToday > 0 ? Math.round((totalActivities / daysUpToToday) * 10) / 10 : 0;
     };
 
     const getActiveDays = (): number => {
-        const allActivities = activityRows.flatMap(row => row.activities);
-        const uniqueDates = new Set(allActivities.map(activity => activity.date));
+        const allCompletedDays = activityRows.flatMap(row => row.completedDays || []);
+        const uniqueDates = new Set(allCompletedDays);
         return uniqueDates.size;
     };
 
-    const formatDate = (date: Date): string => {
-        return date.toLocaleDateString('en-US', {
-            weekday: 'short',
-            month: 'short',
-            day: 'numeric',
-        });
+    const getTotalActivitiesForDay = (date: Date): number => {
+        const dateStr = date.toISOString().split('T')[0];
+        return activityRows.reduce((total, row) => {
+            return total + (row.completedDays?.includes(dateStr) ? 1 : 0);
+        }, 0);
     };
 
     const isToday = (date: Date): boolean => {
@@ -139,189 +128,232 @@ export default function Home() {
 
     const addNewActivityRow = () => {
         if (newRowName.trim()) {
-            const colors = ['blue', 'green', 'purple', 'red', 'yellow', 'indigo', 'pink', 'orange'];
             const newRow: ActivityRow = {
                 id: Date.now().toString(),
                 name: newRowName.trim(),
-                color: colors[activityRows.length % colors.length],
-                activities: []
+                emoji: newRowEmoji,
+                completedDays: [],
             };
             setActivityRows(prev => [...prev, newRow]);
             setNewRowName('');
+            setNewRowEmoji('🏃');
             setShowAddRow(false);
         }
     };
 
     const deleteActivityRow = (rowId: string) => {
-        if (activityRows.length > 1) {
-            setActivityRows(prev => prev.filter(row => row.id !== rowId));
-        }
+        // Allow deleting any activity row (but Total row is not in activityRows)
+        setActivityRows(prev => prev.filter(row => row.id !== rowId));
     };
 
-    const getColorClasses = (color: string) => {
-        const colorMap: { [key: string]: string } = {
-            blue: 'bg-blue-500 hover:bg-blue-600',
-            green: 'bg-green-500 hover:bg-green-600',
-            purple: 'bg-purple-500 hover:bg-purple-600',
-            red: 'bg-red-500 hover:bg-red-600',
-            yellow: 'bg-yellow-500 hover:bg-yellow-600',
-            indigo: 'bg-indigo-500 hover:bg-indigo-600',
-            pink: 'bg-pink-500 hover:bg-pink-600',
-            orange: 'bg-orange-500 hover:bg-orange-600'
-        };
-        return colorMap[color] || 'bg-blue-500 hover:bg-blue-600';
-    };
+    if (isLoading) {
+        return (
+            <div className='min-h-screen bg-slate-800 flex items-center justify-center'>
+                <div className='text-white text-xl'>Loading...</div>
+            </div>
+        );
+    }
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
-            <div className="container mx-auto px-4 py-8">
+        <div className='min-h-screen bg-slate-800'>
+            <div className='container mx-auto px-4 py-4 sm:py-8 max-w-4xl'>
                 {/* Header */}
-                <div className="text-center mb-8">
-                    <h1 className="text-4xl font-bold text-gray-800 dark:text-white mb-2">
-                        Activity Tracker
-                    </h1>
-                    <p className="text-gray-600 dark:text-gray-300">
-                        Track your daily activities and stay motivated!
-                    </p>
+                <div className='text-center mb-6 sm:mb-8'>
+                    <h1 className='text-2xl sm:text-4xl font-bold text-white mb-2'>Activity Tracker</h1>
+                    <p className='text-white text-sm sm:text-lg'>Track your daily activities and stay motivated!</p>
                 </div>
 
                 {/* Statistics */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-                    <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-md">
-                        <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                            Total Activities
-                        </h3>
-                        <p className="text-3xl font-bold text-blue-600 dark:text-blue-400">
-                            {getTotalActivities()}
-                        </p>
+                <div className='grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-6 sm:mb-8'>
+                    <div className='bg-slate-700 rounded-lg p-4 sm:p-6 shadow-md'>
+                        <h3 className='text-sm sm:text-lg font-semibold text-white mb-1 sm:mb-2'>Total Activities</h3>
+                        <p className='text-2xl sm:text-3xl font-bold text-blue-400'>{getTotalActivities()}</p>
                     </div>
-                    <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-md">
-                        <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                            Average per Day
-                        </h3>
-                        <p className="text-3xl font-bold text-green-600 dark:text-green-400">
-                            {getAverageActivities()}
-                        </p>
+                    <div className='bg-slate-700 rounded-lg p-4 sm:p-6 shadow-md'>
+                        <h3 className='text-sm sm:text-lg font-semibold text-white mb-1 sm:mb-2'>Average per Day</h3>
+                        <p className='text-2xl sm:text-3xl font-bold text-green-400'>{getAverageActivities()}</p>
                     </div>
-                    <div className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-md">
-                        <h3 className="text-lg font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                            Active Days
-                        </h3>
-                        <p className="text-3xl font-bold text-purple-600 dark:text-purple-400">
-                            {getActiveDays()}
-                        </p>
+                    <div className='bg-slate-700 rounded-lg p-4 sm:p-6 shadow-md'>
+                        <h3 className='text-sm sm:text-lg font-semibold text-white mb-1 sm:mb-2'>Active Days</h3>
+                        <p className='text-2xl sm:text-3xl font-bold text-purple-400'>{getActiveDays()}</p>
                     </div>
                 </div>
 
-                {/* Activity Rows */}
-                <div className="space-y-6">
-                    {activityRows.map((row) => (
-                        <div key={row.id} className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
-                            <div className="flex items-center justify-between mb-4">
-                                <h2 className="text-xl font-bold text-gray-800 dark:text-white">
-                                    {row.name}
-                                </h2>
-                                {activityRows.length > 1 && (
-                                    <button
-                                        onClick={() => deleteActivityRow(row.id)}
-                                        className="text-red-500 hover:text-red-700 text-sm"
+                {/* Activity Tracking Grid */}
+                <div className='bg-slate-700 rounded-lg p-3 sm:p-6 mb-12'>
+                    {/* Date Headers */}
+                    <div className='grid grid-cols-9 gap-1 sm:gap-2 mb-4 sm:mb-6'>
+                        <div></div> {/* Empty cell for emoji column */}
+                        {currentWeek.map((date, index) => {
+                            const isCurrentDay = isToday(date);
+                            return (
+                                <div key={index} className='text-center'>
+                                    <div
+                                        className={`font-medium text-xs sm:text-sm ${
+                                            isCurrentDay
+                                                ? 'text-blue-400 bg-blue-900/30 px-1 sm:px-2 py-1 rounded'
+                                                : 'text-white px-1 sm:px-2 py-1'
+                                        }`}
                                     >
-                                        Delete Row
-                                    </button>
-                                )}
-                            </div>
+                                        <div>{date.toLocaleDateString('en-US', { weekday: 'short' })}</div>
+                                        <div className='text-xs'>{date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                        <div></div> {/* Empty cell for delete button column */}
+                    </div>
+
+                    {/* Total Row */}
+                    <div className='grid grid-cols-9 gap-1 sm:gap-2 items-center mb-4 pb-4 sm:mb-6 sm:pb-6 border-b border-slate-600'>
+                        <div className='flex items-center space-x-1 sm:space-x-2'>
+                            <span className='text-xl sm:text-2xl'>📊</span>
+                            <span className='text-white text-xs sm:text-sm font-medium hidden sm:block'>Total</span>
+                        </div>
+                        {currentWeek.map((date, index) => {
+                            const totalCount = getTotalActivitiesForDay(date);
+                            const isCurrentDay = isToday(date);
                             
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-4">
+                            return (
+                                <div key={index} className='flex justify-center'>
+                                    <div
+                                        className={`w-8 h-8 sm:w-10 sm:h-10 rounded flex items-center justify-center text-sm sm:text-base font-bold ${
+                                            isCurrentDay
+                                                ? 'bg-slate-500 border-2 border-blue-400'
+                                                : 'bg-slate-600'
+                                        }`}
+                                    >
+                                        <span className='text-white'>{totalCount}</span>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                        <div></div> {/* Empty cell for delete button column */}
+                    </div>
+
+                    {/* Activity Rows */}
+                    <div className='space-y-4 sm:space-y-6'>
+                        {activityRows.map(row => (
+                            <div key={row.id} className='grid grid-cols-9 gap-1 sm:gap-2 items-center'>
+                                {/* Activity Emoji and Name */}
+                                <div className='flex items-center space-x-1 sm:space-x-2'>
+                                    <span className='text-xl sm:text-2xl'>{row.emoji}</span>
+                                    <span className='text-white text-xs sm:text-sm font-medium hidden sm:block'>{row.name}</span>
+                                </div>
+
+                                {/* Day Checkboxes */}
                                 {currentWeek.map((date, index) => {
-                                    const count = getActivityCount(row.id, date);
+                                    const isCompleted = isActivityCompleted(row.id, date);
                                     const isCurrentDay = isToday(date);
+                                    const isFutureDate = date > new Date();
+                                    const isDisabled = isFutureDate;
 
                                     return (
-                                        <div
-                                            key={index}
-                                            className={`p-4 rounded-lg border-2 transition-all duration-200 ${
-                                                isCurrentDay
-                                                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                                                    : 'border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-700'
-                                            }`}
-                                        >
-                                            <div className="text-center">
-                                                <h3
-                                                    className={`font-semibold mb-2 ${
-                                                        isCurrentDay
-                                                            ? 'text-blue-700 dark:text-blue-300'
-                                                            : 'text-gray-700 dark:text-gray-300'
-                                                    }`}
-                                                >
-                                                    {formatDate(date)}
-                                                </h3>
-
-                                                <div className="mb-3">
-                                                    <span className="text-2xl font-bold text-gray-800 dark:text-white">
-                                                        {count}
-                                                    </span>
-                                                    <span className="text-sm text-gray-500 dark:text-gray-400 ml-1">
-                                                        activities
-                                                    </span>
-                                                </div>
-
-                                                <div className="flex gap-2 justify-center">
-                                                    <button
-                                                        onClick={() =>
-                                                            decrementActivity(row.id, date)
-                                                        }
-                                                        disabled={count === 0}
-                                                        className="w-8 h-8 rounded-full bg-red-500 text-white hover:bg-red-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
-                                                    >
-                                                        -
-                                                    </button>
-                                                    <button
-                                                        onClick={() =>
-                                                            incrementActivity(row.id, date)
-                                                        }
-                                                        className={`w-8 h-8 rounded-full text-white transition-colors ${getColorClasses(row.color)}`}
-                                                    >
-                                                        +
-                                                    </button>
-                                                </div>
-                                            </div>
+                                        <div key={index} className='flex justify-center'>
+                                            <button
+                                                onClick={() => !isDisabled && toggleActivityCompletion(row.id, date)}
+                                                disabled={isDisabled}
+                                                className={`w-8 h-8 sm:w-10 sm:h-10 rounded transition-colors cursor-pointer ${
+                                                    isCompleted
+                                                        ? 'bg-gray-200 hover:bg-gray-300 border-2 border-gray-400'
+                                                        : isCurrentDay
+                                                          ? 'bg-gray-100 hover:bg-gray-200 border-2 border-blue-400'
+                                                          : isDisabled
+                                                          ? 'bg-slate-800 cursor-not-allowed opacity-50'
+                                                          : 'bg-gray-100 hover:bg-gray-200 border border-gray-300'
+                                                }`}
+                                            >
+                                                {isCompleted && <span className='text-black text-lg sm:text-xl font-bold'>✓</span>}
+                                            </button>
                                         </div>
                                     );
                                 })}
+
+                                {/* Delete Button */}
+                                <div className='flex justify-center'>
+                                    <button
+                                        onClick={() => deleteActivityRow(row.id)}
+                                        className='text-red-400 py-2 px-4 hover:text-red-300 text-lg sm:text-xl font-bold cursor-pointer'
+                                    >
+                                        X
+                                    </button>
+                                </div>
                             </div>
-                        </div>
-                    ))}
+                        ))}
+                    </div>
                 </div>
 
+                {/* No activities message */}
+                {activityRows.length === 0 && (
+                    <div className='text-center mb-4 sm:mb-6 p-4 bg-slate-700 rounded-lg'>
+                        <p className='text-slate-300 text-sm sm:text-base'>
+                            <strong>Get started:</strong> Add your first activity row below to begin tracking your daily activities!
+                        </p>
+                    </div>
+                )}
+
                 {/* Add New Row Section */}
-                <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6">
+                <div className='rounded-lg w-full mx-auto'>
                     {!showAddRow ? (
-                        <button
-                            onClick={() => setShowAddRow(true)}
-                            className="w-full py-3 px-4 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors font-medium"
-                        >
-                            + Add New Activity Type
-                        </button>
+                        <div className='max-w-100 mx-auto'>
+                            <button
+                                onClick={() => setShowAddRow(true)}
+                                className='w-full py-3 px-4 bg-slate-600 text-white rounded-lg hover:bg-slate-500 transition-colors font-medium flex items-center justify-center space-x-2 cursor-pointer'
+                            >
+                                <span>Add new row</span>
+                                <span>+</span>
+                            </button>
+                        </div>
                     ) : (
-                        <div className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                    Activity Name
-                                </label>
-                                <input
-                                    type="text"
-                                    value={newRowName}
-                                    onChange={(e) => setNewRowName(e.target.value)}
-                                    placeholder="e.g., Running, Gym, Reading..."
-                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
-                                    autoFocus
-                                />
+                        <div className='space-y-4'>
+                            <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
+                                <div>
+                                    <label className='block font-medium text-white mb-2 text-base '>Activity Name</label>
+                                    <input
+                                        type='text'
+                                        value={newRowName}
+                                        onChange={e => setNewRowName(e.target.value)}
+                                        placeholder='Running, Gym...'
+                                        className='w-full h-12 px-3 py-2 border border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-slate-600 text-white placeholder-slate-400'
+                                        autoFocus
+                                    />
+                                </div>
+                                <div>
+                                    <label className='block text-base font-medium text-white mb-2'>Choose emoji</label>
+                                    <div className='relative'>
+                                        <button
+                                            onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                                            className='w-full h-12 px-3 py-2 border border-slate-600 rounded-lg bg-slate-600 text-white text-left flex items-center justify-between cursor-pointer'
+                                        >
+                                            <span className='text-2xl'>{newRowEmoji}</span>
+                                            <span>▼</span>
+                                        </button>
+                                        {showEmojiPicker && (
+                                            <div className='absolute top-full left-0 right-0 mt-1 bg-slate-600 border border-slate-500 rounded-lg p-2 z-10 max-h-60 overflow-y-auto cursor-pointer'>
+                                                <div className='grid grid-cols-5 gap-2'>
+                                                    {emojiLibrary.map(emoji => (
+                                                        <button
+                                                            key={emoji}
+                                                            onClick={() => {
+                                                                setNewRowEmoji(emoji);
+                                                                setShowEmojiPicker(false);
+                                                            }}
+                                                            className='p-2 hover:bg-slate-500 rounded text-2xl cursor-pointer'
+                                                        >
+                                                            {emoji}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
                             </div>
-                            <div className="flex gap-2">
+                            <div className='flex gap-2'>
                                 <button
                                     onClick={addNewActivityRow}
                                     disabled={!newRowName.trim()}
-                                    className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
+                                    className='px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:bg-blue-600 disabled:cursor-not-allowed transition-colors cursor-pointer'
                                 >
                                     Add Activity
                                 </button>
@@ -329,27 +361,16 @@ export default function Home() {
                                     onClick={() => {
                                         setShowAddRow(false);
                                         setNewRowName('');
+                                        setNewRowEmoji('🏃');
+                                        setShowEmojiPicker(false);
                                     }}
-                                    className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors"
+                                    className='px-4 py-2 bg-slate-500 text-white rounded-lg hover:bg-slate-400 transition-colors cursor-pointer'
                                 >
                                     Cancel
                                 </button>
                             </div>
                         </div>
                     )}
-                </div>
-
-                {/* Reset Button */}
-                <div className="text-center mt-8">
-                    <button
-                        onClick={() => {
-                            setActivityRows([]);
-                            localStorage.removeItem('activityRows');
-                        }}
-                        className="px-6 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
-                    >
-                        Reset All Data
-                    </button>
                 </div>
             </div>
         </div>
