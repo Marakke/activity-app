@@ -44,7 +44,7 @@ export default function Home() {
     }, []);
 
     // Load saved activity rows from localStorage
-    useEffect(() => {
+    useEffect(() => {  
         const savedRows = localStorage.getItem('activityRows');
         if (savedRows) {
             try {
@@ -132,6 +132,52 @@ export default function Home() {
     const isToday = (date: Date): boolean => {
         const today = new Date();
         return date.toDateString() === today.toDateString();
+    };
+
+    // Weekly trend functions
+    const getWeekStartDate = (date: Date): Date => {
+        const startOfWeek = new Date(date);
+        const dayOfWeek = date.getDay(); // 0 = Sunday, 1 = Monday, etc.
+        const daysToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek; // Convert to Monday start
+        startOfWeek.setDate(date.getDate() + daysToMonday);
+        return startOfWeek;
+    };
+
+    const getWeeklyTrendData = (): { week: string; count: number }[] => {
+        if (activityRows.length === 0) return [];
+
+        // Get all completed dates
+        const allCompletedDays = activityRows.flatMap(row => row.completedDays || []);
+        if (allCompletedDays.length === 0) return [];
+
+        // Group by week
+        const weekGroups: { [key: string]: string[] } = {};
+        
+        allCompletedDays.forEach(dateStr => {
+            const date = new Date(dateStr);
+            const weekStart = getWeekStartDate(date);
+            const weekKey = weekStart.toISOString().split('T')[0];
+            
+            if (!weekGroups[weekKey]) {
+                weekGroups[weekKey] = [];
+            }
+            weekGroups[weekKey].push(dateStr);
+        });
+
+        // Convert to array and sort by week
+        const trendData = Object.entries(weekGroups)
+            .map(([week, dates]) => ({
+                week: week,
+                count: dates.length
+            }))
+            .sort((a, b) => a.week.localeCompare(b.week));
+
+        return trendData;
+    };
+
+    const getMaxWeeklyCount = (): number => {
+        const trendData = getWeeklyTrendData();
+        return trendData.length > 0 ? Math.max(...trendData.map(d => d.count)) : 0;
     };
 
     const addNewActivityRow = () => {
@@ -244,6 +290,22 @@ export default function Home() {
         }
     }, [currentWeek]);
 
+    // Utility to get ISO week number
+    function getISOWeekNumber(date: Date): number {
+        const tempDate = new Date(date.getTime());
+        tempDate.setHours(0, 0, 0, 0);
+        // Thursday in current week decides the year
+        tempDate.setDate(tempDate.getDate() + 3 - ((tempDate.getDay() + 6) % 7));
+        // January 4 is always in week 1.
+        const week1 = new Date(tempDate.getFullYear(), 0, 4);
+        // Adjust to Thursday in week 1 and count number of weeks from date to week1.
+        return (
+            1 + Math.round(
+                ((tempDate.getTime() - week1.getTime()) / 86400000 - 3 + ((week1.getDay() + 6) % 7)) / 7
+            )
+        );
+    }
+
     if (isLoading) {
         return (
             <div className='min-h-screen bg-slate-800 flex items-center justify-center'>
@@ -277,43 +339,8 @@ export default function Home() {
                     </div>
                 </div>
 
-                {/* AI Analysis Section */}
-                {(aiAnalysis || checkWeekComplete()) && (
-                    <div className='bg-slate-700 rounded-lg p-4 sm:p-6 mb-6'>
-                        <div className='flex items-center justify-between mb-4'>
-                            <h3 className='text-lg font-semibold text-white flex items-center'>
-                                🤖 AI Weekly Analysis
-                            </h3>
-                            {checkWeekComplete() && !weekCompleted && (
-                                <button
-                                    onClick={completeWeek}
-                                    disabled={isGeneratingAnalysis}
-                                    className='px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:bg-blue-300 disabled:cursor-not-allowed transition-colors cursor-pointer text-sm font-medium'
-                                >
-                                    {isGeneratingAnalysis ? 'Generating...' : 'Complete Week'}
-                                </button>
-                            )}
-                        </div>
-                        
-                        {isGeneratingAnalysis ? (
-                            <div className='flex items-center space-x-2 text-slate-300'>
-                                <div className='animate-spin rounded-full h-4 w-4 border-b-2 border-purple-400'></div>
-                                <span>Analyzing your week...</span>
-                            </div>
-                        ) : aiAnalysis ? (
-                            <div className='text-slate-200 leading-relaxed'>
-                                {aiAnalysis}
-                            </div>
-                        ) : checkWeekComplete() ? (
-                            <div className='text-slate-300 text-sm'>
-                                Ready to complete your week? Click the button above to get your AI analysis!
-                            </div>
-                        ) : null}
-                    </div>
-                )}
-
                 {/* Activity Tracking Grid */}
-                <div className='bg-slate-700 rounded-lg p-3 sm:p-6 mb-12'>
+                <div className='bg-slate-700 rounded-lg p-3 sm:p-6 mb-6'>
                     {/* Date Headers */}
                     <div className='grid grid-cols-9 gap-1 sm:gap-2 mb-4 sm:mb-6'>
                         <div></div> {/* Empty cell for emoji column */}
@@ -426,7 +453,7 @@ export default function Home() {
                 )}
 
                 {/* Add New Row Section */}
-                <div className='rounded-lg w-full mx-auto'>
+                <div className='rounded-lg w-full mx-auto mb-6'>
                     {!showAddRow ? (
                         <div className='max-w-100 mx-auto'>
                             <button
@@ -505,6 +532,157 @@ export default function Home() {
                         </div>
                     )}
                 </div>
+
+                {/* Weekly Trend Section */}
+                {getWeeklyTrendData().length > 0 && (
+                    <div className='bg-slate-700 rounded-lg p-4 sm:p-6 mb-6'>
+                        <h3 className='text-lg font-semibold text-white mb-4 flex items-center'>
+                            📈 Activity Trend
+                        </h3>
+                        
+                        <div className='space-y-4'>
+                            {/* Combined Bar Chart + Line Graph */}
+                            <div className='bg-slate-800 rounded-lg pb-2'>
+                                {/* Chart Area */}
+                                <div className='relative h-32 sm:h-40'>
+                                    {/* Line Graph */}
+                                    <svg className='absolute inset-0 w-full h-full' style={{ zIndex: 10, overflow: 'visible' }}>
+                                        {getWeeklyTrendData().map((data, index) => {
+                                            if (index === 0) return null;
+                                            
+                                            const maxCount = getMaxWeeklyCount();
+                                            const prevData = getWeeklyTrendData()[index - 1];
+                                            
+                                            // Account for padding: use 85% of height for chart, 10% top padding, 5% bottom padding
+                                            const chartHeight = 85;
+                                            const topPadding = 10;
+                                            
+                                            const prevHeight = maxCount > 0 ? (prevData.count / maxCount) * chartHeight : 0;
+                                            const currentHeight = maxCount > 0 ? (data.count / maxCount) * chartHeight : 0;
+                                            
+                                            const barWidth = 100 / getWeeklyTrendData().length;
+                                            const prevX = (index - 1) * barWidth + barWidth / 2;
+                                            const currentX = index * barWidth + barWidth / 2;
+                                            
+                                            // Y positions with padding: invert and add top padding
+                                            const prevY = topPadding + (chartHeight - prevHeight);
+                                            const currentY = topPadding + (chartHeight - currentHeight);
+                                            
+                                            return (
+                                                <line
+                                                    key={`line-${index}`}
+                                                    x1={`${prevX}%`}
+                                                    y1={`${prevY}%`}
+                                                    x2={`${currentX}%`}
+                                                    y2={`${currentY}%`}
+                                                    stroke='#A020F0'
+                                                    strokeWidth='3'
+                                                    strokeLinecap='round'
+                                                />
+                                            );
+                                        })}
+                                        
+                                        {/* Data points */}
+                                        {getWeeklyTrendData().map((data, index) => {
+                                            const maxCount = getMaxWeeklyCount();
+                                            // Account for padding: use 85% of height for chart, 10% top padding, 5% bottom padding
+                                            const chartHeight = 85;
+                                            const topPadding = 10;
+                                            
+                                            const height = maxCount > 0 ? (data.count / maxCount) * chartHeight : 0;
+                                            const barWidth = 100 / getWeeklyTrendData().length;
+                                            const x = index * barWidth + barWidth / 2;
+                                            // Y position with padding: invert and add top padding
+                                            const y = topPadding + (chartHeight - height);
+                                            
+                                            return (
+                                                <circle
+                                                    key={`point-${index}`}
+                                                    cx={`${x}%`}
+                                                    cy={`${y}%`}
+                                                    r='4'
+                                                    fill='#A020F0'
+                                                    stroke='#1e293b'
+                                                    strokeWidth='2'
+                                                />
+                                            );
+                                        })}
+                                    </svg>
+                                </div>
+                                
+                                {/* Labels below chart */}
+                                <div className='flex justify-between mt-3'>
+                                    {getWeeklyTrendData().map((data, index) => {
+                                        const weekDate = new Date(data.week);
+                                        const weekLabel = `Week ${getISOWeekNumber(weekDate)}`;
+                                        return (
+                                            <div key={data.week} className='flex flex-col items-center flex-1 text-center'>
+                                                <div className='text-xs font-medium text-white mb-1'>{data.count}</div>
+                                                <div className='text-xs text-slate-300'>{weekLabel}</div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                            
+                            {/* Trend Summary */}
+                            <div className='grid grid-cols-2 sm:grid-cols-3 gap-4 text-center'>
+                                <div className='bg-slate-800 rounded-lg p-3'>
+                                    <div className='text-sm text-slate-300'>Total Weeks</div>
+                                    <div className='text-lg font-bold text-white'>{getWeeklyTrendData().length}</div>
+                                </div>
+                                <div className='bg-slate-800 rounded-lg p-3'>
+                                    <div className='text-sm text-slate-300'>Best Week</div>
+                                    <div className='text-lg font-bold text-green-400'>{getMaxWeeklyCount()}</div>
+                                </div>
+                                <div className='bg-slate-800 rounded-lg p-3 sm:col-span-1 col-span-2'>
+                                    <div className='text-sm text-slate-300'>Average/Week</div>
+                                    <div className='text-lg font-bold text-blue-400'>
+                                        {getWeeklyTrendData().length > 0 
+                                            ? Math.round(getWeeklyTrendData().reduce((sum, d) => sum + d.count, 0) / getWeeklyTrendData().length)
+                                            : 0
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* AI Analysis Section */}
+                {(aiAnalysis || checkWeekComplete()) && (
+                    <div className='bg-slate-700 rounded-lg p-4 sm:p-6 mb-6'>
+                        <div className='flex items-center justify-between mb-4'>
+                            <h3 className='text-lg font-semibold text-white flex items-center'>
+                                🤖 AI Weekly Analysis
+                            </h3>
+                            {checkWeekComplete() && !weekCompleted && (
+                                <button
+                                    onClick={completeWeek}
+                                    disabled={isGeneratingAnalysis}
+                                    className='px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:bg-blue-300 disabled:cursor-not-allowed transition-colors cursor-pointer text-sm font-medium'
+                                >
+                                    {isGeneratingAnalysis ? 'Generating...' : 'Complete Week'}
+                                </button>
+                            )}
+                        </div>
+                        
+                        {isGeneratingAnalysis ? (
+                            <div className='flex items-center space-x-2 text-slate-300'>
+                                <div className='animate-spin rounded-full h-4 w-4 border-b-2 border-purple-400'></div>
+                                <span>Analyzing your week...</span>
+                            </div>
+                        ) : aiAnalysis ? (
+                            <div className='text-slate-200 leading-relaxed'>
+                                {aiAnalysis}
+                            </div>
+                        ) : checkWeekComplete() ? (
+                            <div className='text-slate-300 text-sm'>
+                                Ready to complete your week? Click the button above to get your AI analysis!
+                            </div>
+                        ) : null}
+                    </div>
+                )}
             </div>
         </div>
     );
