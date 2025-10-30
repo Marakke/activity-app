@@ -22,6 +22,7 @@ export default function Home() {
     const [isGeneratingAnalysis, setIsGeneratingAnalysis] = useState<boolean>(false);
     const [weekCompleted, setWeekCompleted] = useState<boolean>(false);
     const [lastAnalysisWeek, setLastAnalysisWeek] = useState<string>('');
+    const [showAnalysis, setShowAnalysis] = useState(false);
 
     // Initialize Gemini AI client
     const ai = new GoogleGenAI({ apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY ?? '' });
@@ -200,19 +201,9 @@ export default function Home() {
         setActivityRows(prev => prev.filter(row => row.id !== rowId));
     };
 
-    // Check if current week is complete (it's Sunday and we have some activities)
-    const checkWeekComplete = () => {
-        const today = new Date();
-        const isSunday = today.getDay() === 0;
-        const hasActivities = activityRows.length > 0;
-        const currentWeekKey = currentWeek[0]?.toISOString().split('T')[0] || '';
-        
-        return isSunday && hasActivities && lastAnalysisWeek !== currentWeekKey;
-    };
-
     // Generate AI analysis for the week
     const generateAIAnalysis = async () => {
-        if (!process.env.NEXT_PUBLIC_GEMINI_API_KEY || process.env.NEXT_PUBLIC_GEMINI_API_KEY === 'demo-key') {
+        if (!process.env.NEXT_PUBLIC_GEMINI_API_KEY) {
             // Fallback analysis if no API key
             const totalActivities = getTotalActivities();
             const activeDays = getActiveDays();
@@ -325,17 +316,17 @@ export default function Home() {
 
                 {/* Statistics */}
                 <div className='grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-6'>
-                    <div className='bg-slate-700 rounded-lg p-4 sm:p-6 shadow-md'>
-                        <h3 className='text-sm sm:text-lg font-semibold text-white mb-1 sm:mb-2'>Total Activities</h3>
-                        <p className='text-2xl sm:text-3xl font-bold text-blue-400'>{getTotalActivities()}</p>
+                    <div className='bg-slate-700 rounded-lg p-4 sm:p-6 shadow-md text-center'>
+                        <h3 className='text-sm sm:text-lg font-semibold text-white mb-1 sm:mb-2 text-center'>Total Activities</h3>
+                        <p className='text-2xl sm:text-3xl font-bold text-blue-400 text-center'>{getTotalActivities()}</p>
                     </div>
-                    <div className='bg-slate-700 rounded-lg p-4 sm:p-6 shadow-md'>
-                        <h3 className='text-sm sm:text-lg font-semibold text-white mb-1 sm:mb-2'>Average per Day</h3>
-                        <p className='text-2xl sm:text-3xl font-bold text-green-400'>{getAverageActivities()}</p>
+                    <div className='bg-slate-700 rounded-lg p-4 sm:p-6 shadow-md text-center'>
+                        <h3 className='text-sm sm:text-lg font-semibold text-white mb-1 sm:mb-2 text-center'>Average per Day</h3>
+                        <p className='text-2xl sm:text-3xl font-bold text-green-400 text-center'>{getAverageActivities()}</p>
                     </div>
-                    <div className='bg-slate-700 rounded-lg p-4 sm:p-6 shadow-md'>
-                        <h3 className='text-sm sm:text-lg font-semibold text-white mb-1 sm:mb-2'>Active Days</h3>
-                        <p className='text-2xl sm:text-3xl font-bold text-purple-400'>{getActiveDays()}</p>
+                    <div className='bg-slate-700 rounded-lg p-4 sm:p-6 shadow-md text-center'>
+                        <h3 className='text-sm sm:text-lg font-semibold text-white mb-1 sm:mb-2 text-center'>Active Days</h3>
+                        <p className='text-2xl sm:text-3xl font-bold text-purple-400 text-center'>{getActiveDays()}</p>
                     </div>
                 </div>
 
@@ -452,16 +443,29 @@ export default function Home() {
                     </div>
                 )}
 
-                {/* Add New Row Section */}
+                {/* Add New Row and Complete Week Section */}
                 <div className='rounded-lg w-full mx-auto mb-6'>
                     {!showAddRow ? (
-                        <div className='max-w-100 mx-auto'>
+                        <div className='mx-auto flex flex-row gap-3'>
                             <button
                                 onClick={() => setShowAddRow(true)}
-                                className='w-full py-3 px-4 bg-slate-600 text-white rounded-lg hover:bg-slate-500 transition-colors font-medium flex items-center justify-center space-x-2 cursor-pointer'
+                                className='w-full py-3 px-4 bg-blue-500/80 text-white rounded-lg hover:bg-blue-500 transition-colors font-medium flex items-center justify-center space-x-2 cursor-pointer'
                             >
                                 <span>Add new row</span>
                                 <span>+</span>
+                            </button>
+                            <button
+                                onClick={async () => { setShowAnalysis(true); await completeWeek(); }}
+                                disabled={isGeneratingAnalysis || weekCompleted}
+                                className='w-full py-3 px-4 bg-sky-500/75 text-white rounded-lg hover:bg-sky-500 transition-colors font-medium flex items-center justify-center cursor-pointer disabled:bg-slate-700 disabled:cursor-not-allowed gap-2'
+                            >
+                                <span>{weekCompleted
+                                    ? 'Week completed!'
+                                    : isGeneratingAnalysis
+                                        ? 'Completing...'
+                                        : 'Complete week'
+                                }</span>
+                                <span>{!isGeneratingAnalysis || weekCompleted ? '✓' : ''}</span>
                             </button>
                         </div>
                     ) : (
@@ -513,7 +517,7 @@ export default function Home() {
                                 <button
                                     onClick={addNewActivityRow}
                                     disabled={!newRowName.trim()}
-                                    className='px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:bg-blue-600 disabled:cursor-not-allowed transition-colors cursor-pointer'
+                                    className='px-4 py-2 bg-blue-500/80 text-white rounded-lg hover:bg-blue-500 disabled:bg-slate-700 disabled:cursor-not-allowed transition-colors cursor-pointer'
                                 >
                                     Add Activity
                                 </button>
@@ -626,22 +630,37 @@ export default function Home() {
                             </div>
                             
                             {/* Trend Summary */}
-                            <div className='grid grid-cols-2 sm:grid-cols-3 gap-4 text-center'>
-                                <div className='bg-slate-800 rounded-lg p-3'>
-                                    <div className='text-sm text-slate-300'>Total Weeks</div>
-                                    <div className='text-lg font-bold text-white'>{getWeeklyTrendData().length}</div>
-                                </div>
-                                <div className='bg-slate-800 rounded-lg p-3'>
-                                    <div className='text-sm text-slate-300'>Best Week</div>
-                                    <div className='text-lg font-bold text-green-400'>{getMaxWeeklyCount()}</div>
-                                </div>
+                            <div className='grid grid-cols-2 sm:grid-cols-2 gap-4 text-center'>
                                 <div className='bg-slate-800 rounded-lg p-3 sm:col-span-1 col-span-2'>
-                                    <div className='text-sm text-slate-300'>Average/Week</div>
+                                    <div className='text-sm text-slate-300'>Average / week</div>
                                     <div className='text-lg font-bold text-blue-400'>
                                         {getWeeklyTrendData().length > 0 
                                             ? Math.round(getWeeklyTrendData().reduce((sum, d) => sum + d.count, 0) / getWeeklyTrendData().length)
                                             : 0
                                         }
+                                    </div>
+                                </div>
+                                <div className='bg-slate-800 rounded-lg p-3 flex flex-col items-center'>
+                                    <div className='text-sm text-slate-300'>Change from last week</div>
+                                    <div className='text-lg font-bold'>
+                                        {(() => {
+                                            const data = getWeeklyTrendData();
+                                            if (data.length < 2) {
+                                                return (
+                                                    <span className="text-slate-400">–</span>
+                                                );
+                                            }
+                                            const thisWeek = data[data.length - 1]?.count ?? 0;
+                                            const lastWeek = data[data.length - 2]?.count ?? 0;
+                                            const diff = thisWeek - lastWeek;
+                                            if (diff === 0) {
+                                                return <span className="text-slate-400">0</span>;
+                                            } else if (diff > 0) {
+                                                return <span className="text-green-400">+{diff}</span>;
+                                            } else {
+                                                return <span className="text-red-400">{diff}</span>;
+                                            }
+                                        })()}
                                     </div>
                                 </div>
                             </div>
@@ -650,21 +669,12 @@ export default function Home() {
                 )}
 
                 {/* AI Analysis Section */}
-                {(aiAnalysis || checkWeekComplete()) && (
+                {(aiAnalysis || showAnalysis) && (
                     <div className='bg-slate-700 rounded-lg p-4 sm:p-6 mb-6'>
                         <div className='flex items-center justify-between mb-4'>
                             <h3 className='text-lg font-semibold text-white flex items-center'>
                                 🤖 AI Weekly Analysis
                             </h3>
-                            {checkWeekComplete() && !weekCompleted && (
-                                <button
-                                    onClick={completeWeek}
-                                    disabled={isGeneratingAnalysis}
-                                    className='px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:bg-blue-300 disabled:cursor-not-allowed transition-colors cursor-pointer text-sm font-medium'
-                                >
-                                    {isGeneratingAnalysis ? 'Generating...' : 'Complete Week'}
-                                </button>
-                            )}
                         </div>
                         
                         {isGeneratingAnalysis ? (
@@ -675,10 +685,6 @@ export default function Home() {
                         ) : aiAnalysis ? (
                             <div className='text-slate-200 leading-relaxed'>
                                 {aiAnalysis}
-                            </div>
-                        ) : checkWeekComplete() ? (
-                            <div className='text-slate-300 text-sm'>
-                                Ready to complete your week? Click the button above to get your AI analysis!
                             </div>
                         ) : null}
                     </div>
