@@ -806,7 +806,7 @@ export default function Home() {
                                             <span>▼</span>
                                         </button>
                                         {showEmojiPicker && (
-                                            <div className='absolute top-full left-0 right-0 mt-1 bg-slate-600 border border-slate-500 rounded-lg p-2 z-10 max-h-60 overflow-y-auto cursor-pointer'>
+                                            <div className='absolute top-full left-0 right-0 mt-1 bg-slate-600 border border-slate-500 rounded-lg p-2 z-50 max-h-60 overflow-y-auto cursor-pointer'>
                                                 <div className='grid grid-cols-5 gap-2'>
                                                     {emojiLibrary.map(emoji => (
                                                         <button
@@ -961,7 +961,7 @@ export default function Home() {
                                             : 0}
                                     </div>
                                 </div>
-                                <div className='bg-slate-800 rounded-lg p-3 flex flex-col items-center'>
+                                <div className='bg-slate-800 rounded-lg p-3 flex flex-col items-center col-span-2 sm:col-span-1'>
                                     <div className='text-sm text-slate-300'>Change from last week</div>
                                     <div className='text-lg font-bold'>
                                         {(() => {
