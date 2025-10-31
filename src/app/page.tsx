@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react';
 import { GoogleGenAI } from '@google/genai';
 import { supabase } from '@/lib/supabase';
 import AuthForm from '@/components/AuthForm';
-import type { User, Session } from '@supabase/supabase-js';
+import type { User } from '@supabase/supabase-js';
 
 interface ActivityRow {
     id: string;
@@ -15,7 +15,6 @@ interface ActivityRow {
 
 export default function Home() {
     const [user, setUser] = useState<User | null>(null);
-    const [session, setSession] = useState<Session | null>(null);
     const [activityRows, setActivityRows] = useState<ActivityRow[]>([]);
     const [currentWeek, setCurrentWeek] = useState<Date[]>([]);
     const [newRowName, setNewRowName] = useState<string>('');
@@ -26,7 +25,6 @@ export default function Home() {
     const [aiAnalysis, setAiAnalysis] = useState<string>('');
     const [isGeneratingAnalysis, setIsGeneratingAnalysis] = useState<boolean>(false);
     const [weekCompleted, setWeekCompleted] = useState<boolean>(false);
-    const [lastAnalysisWeek, setLastAnalysisWeek] = useState<string>('');
     const [showAnalysis, setShowAnalysis] = useState(false);
     const [menuOpenRowId, setMenuOpenRowId] = useState<string | null>(null);
     const [needsMigration, setNeedsMigration] = useState<boolean>(false);
@@ -40,7 +38,6 @@ export default function Home() {
     // Check auth session on mount
     useEffect(() => {
         supabase.auth.getSession().then(({ data: { session } }) => {
-            setSession(session);
             setUser(session?.user ?? null);
             setIsLoading(false);
         });
@@ -48,7 +45,6 @@ export default function Home() {
         const {
             data: { subscription },
         } = supabase.auth.onAuthStateChange((_event, session) => {
-            setSession(session);
             setUser(session?.user ?? null);
         });
 
@@ -76,6 +72,7 @@ export default function Home() {
             loadActivityRows();
             checkForMigration();
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [user]);
 
     const loadActivityRows = async () => {
@@ -128,7 +125,7 @@ export default function Home() {
 
         try {
             const parsedRows = JSON.parse(savedRows);
-            const validRows = parsedRows.map((row: any) => ({
+            const validRows = parsedRows.map((row: ActivityRow) => ({
                 id: row.id,
                 name: row.name,
                 emoji: row.emoji,
@@ -447,9 +444,7 @@ export default function Home() {
                         { onConflict: 'user_id,week_start' }
                     );
 
-                    if (!error) {
-                        setLastAnalysisWeek(currentWeekKey);
-                    }
+                    // Analysis saved successfully
                 }
             }
         } catch (error) {
@@ -485,7 +480,6 @@ export default function Home() {
 
                 if (!error && data) {
                     setAiAnalysis(data.analysis_text);
-                    setLastAnalysisWeek(currentWeekKey);
                 }
             };
             loadAnalysis();
@@ -523,7 +517,6 @@ export default function Home() {
     const handleLogout = async () => {
         await supabase.auth.signOut();
         setUser(null);
-        setSession(null);
         setActivityRows([]);
         setNeedsMigration(false);
     };
@@ -939,7 +932,7 @@ export default function Home() {
 
                                 {/* Labels below chart */}
                                 <div className='flex justify-between mt-3'>
-                                    {getWeeklyTrendData().map((data, index) => {
+                                    {getWeeklyTrendData().map(data => {
                                         const weekDate = new Date(data.week);
                                         const weekLabel = `Week ${getISOWeekNumber(weekDate)}`;
                                         return (
