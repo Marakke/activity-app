@@ -1,7 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { GoogleGenAI } from '@google/genai';
+import { supabase } from '@/lib/supabase';
+import AuthForm from '@/components/AuthForm';
+import type { User, Session } from '@supabase/supabase-js';
 
 interface ActivityRow {
     id: string;
@@ -11,6 +14,8 @@ interface ActivityRow {
 }
 
 export default function Home() {
+    const [user, setUser] = useState<User | null>(null);
+    const [session, setSession] = useState<Session | null>(null);
     const [activityRows, setActivityRows] = useState<ActivityRow[]>([]);
     const [currentWeek, setCurrentWeek] = useState<Date[]>([]);
     const [newRowName, setNewRowName] = useState<string>('');
@@ -23,11 +28,30 @@ export default function Home() {
     const [weekCompleted, setWeekCompleted] = useState<boolean>(false);
     const [lastAnalysisWeek, setLastAnalysisWeek] = useState<string>('');
     const [showAnalysis, setShowAnalysis] = useState(false);
+    const [menuOpenRowId, setMenuOpenRowId] = useState<string | null>(null);
+    const [needsMigration, setNeedsMigration] = useState<boolean>(false);
+    const [isLoadingFromDB, setIsLoadingFromDB] = useState<boolean>(false);
 
     // Initialize Gemini AI client
     const ai = new GoogleGenAI({ apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY ?? '' });
 
     const emojiLibrary = ['🏃', '🚶', '🏋️', '🚴', '🏊', '🏒', '⚽', '🎾', '🥏', '⛷️', '🕺', '🧹', '❓'];
+
+    // Check auth session on mount
+    useEffect(() => {
+        supabase.auth.getSession().then(({ data: { session } }) => {
+            setSession(session);
+            setUser(session?.user ?? null);
+            setIsLoading(false);
+        });
+
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+            setSession(session);
+            setUser(session?.user ?? null);
+        });
+
+        return () => subscription.unsubscribe();
+    }, []);
 
     // Initialize current week dates
     useEffect(() => {
@@ -44,34 +68,156 @@ export default function Home() {
         setCurrentWeek(weekDates);
     }, []);
 
-    // Load saved activity rows from localStorage
-    useEffect(() => {  
-        const savedRows = localStorage.getItem('activityRows');
-        if (savedRows) {
-            try {
-                const parsedRows = JSON.parse(savedRows);
-                // Ensure all rows have completedDays array
-                const validRows = parsedRows.map((row: any) => ({
-                    ...row,
-                    completedDays: row.completedDays || [],
-                }));
-                setActivityRows(validRows);
-            } catch (error) {
-                console.error('Error parsing saved rows:', error);
-                setActivityRows([]);
-            }
-        } else {
-            setActivityRows([]);
-        }
-        setIsLoading(false);
-    }, []);
-
-    // Save activity rows to localStorage
+    // Load activity rows from Supabase when user is logged in
     useEffect(() => {
-        if (activityRows.length > 0) {
-            localStorage.setItem('activityRows', JSON.stringify(activityRows));
+        if (user) {
+            loadActivityRows();
+            checkForMigration();
         }
-    }, [activityRows]);
+    }, [user]);
+
+    const loadActivityRows = async () => {
+        if (!user) return;
+        
+        setIsLoadingFromDB(true);
+        const { data, error } = await supabase
+            .from('activity_rows')
+            .select('*')
+            .eq('user_id', user.id)
+            .order('order_index', { ascending: true });
+
+        if (error) {
+            console.error('Error loading activity rows:', error);
+            setActivityRows([]);
+            return;
+        }
+
+        setActivityRows(
+            data.map(row => ({
+                id: row.id,
+                name: row.name,
+                emoji: row.emoji,
+                completedDays: row.completed_days || [],
+            }))
+        );
+        setIsLoadingFromDB(false);
+    };
+
+    const checkForMigration = async () => {
+        if (!user) return;
+        
+        // Check if user has data in Supabase already
+        const { data } = await supabase
+            .from('activity_rows')
+            .select('id')
+            .eq('user_id', user.id)
+            .limit(1);
+
+        // If no Supabase data but localStorage has data, offer migration
+        if (!data || data.length === 0) {
+            const savedRows = localStorage.getItem('activityRows');
+            if (savedRows) {
+                setNeedsMigration(true);
+            }
+        }
+    };
+
+    const migrateLocalStorageData = async () => {
+        if (!user) return;
+        
+        const savedRows = localStorage.getItem('activityRows');
+        if (!savedRows) return;
+
+        try {
+            const parsedRows = JSON.parse(savedRows);
+            const validRows = parsedRows.map((row: any) => ({
+                id: row.id,
+                name: row.name,
+                emoji: row.emoji,
+                completedDays: row.completedDays || [],
+            }));
+
+            // Migrate each row to Supabase
+            for (let i = 0; i < validRows.length; i++) {
+                const row = validRows[i];
+                const { error } = await supabase
+                    .from('activity_rows')
+                    .upsert({
+                        id: row.id,
+                        user_id: user.id,
+                        name: row.name,
+                        emoji: row.emoji,
+                        completed_days: row.completedDays,
+                        order_index: i,
+                    }, { onConflict: 'id' });
+
+                if (error) {
+                    console.error('Error migrating row:', error);
+                }
+            }
+
+            // Migrate AI analyses
+            const savedAnalysis = localStorage.getItem('ai_analysis_' + currentWeek[0]?.toISOString().split('T')[0]);
+            if (savedAnalysis) {
+                const currentWeekKey = currentWeek[0]?.toISOString().split('T')[0];
+                const { error } = await supabase
+                    .from('weekly_analyses')
+                    .upsert({
+                        user_id: user.id,
+                        week_start: currentWeekKey,
+                        analysis_text: savedAnalysis,
+                    }, { onConflict: 'user_id,week_start' });
+
+                if (error) {
+                    console.error('Error migrating analysis:', error);
+                }
+            }
+
+            // Clear migration flag and reload
+            setNeedsMigration(false);
+            loadActivityRows();
+            
+            alert('Migration complete! Your data has been saved to the cloud.');
+        } catch (error) {
+            console.error('Error during migration:', error);
+            alert('Migration failed. Please try again.');
+        }
+    };
+
+    // Save activity rows to Supabase
+    useEffect(() => {
+        console.log('Save effect triggered:', { user: !!user, rowsLength: activityRows.length, isLoadingFromDB });
+        if (user && activityRows.length > 0 && !isLoadingFromDB) {
+            activityRows.forEach(async (row, index) => {
+                try {
+                    console.log('Saving row:', { id: row.id, name: row.name, emoji: row.emoji, completedDays: row.completedDays, user_id: user.id });
+                    const payload = {
+                        id: row.id,
+                        user_id: user.id,
+                        name: row.name,
+                        emoji: row.emoji,
+                        completed_days: row.completedDays,
+                        order_index: index,
+                    };
+                    console.log('Payload:', JSON.stringify(payload));
+                    const { error, data } = await supabase
+                        .from('activity_rows')
+                        .upsert(payload, { onConflict: 'id' });
+
+                    if (error) {
+                        console.error('Error saving activity row');
+                        console.error('Error object:', error);
+                        console.error('Row being saved:', row);
+                        console.error('Response data:', data);
+                    } else {
+                        console.log('Successfully saved row:', row.id);
+                    }
+                } catch (err) {
+                    console.error('Exception saving activity row:', err);
+                }
+            });
+        }
+    }, [activityRows, user, isLoadingFromDB]);
 
     const isActivityCompleted = (rowId: string, date: Date): boolean => {
         const dateStr = date.toISOString().split('T')[0];
@@ -196,9 +342,50 @@ export default function Home() {
         }
     };
 
-    const deleteActivityRow = (rowId: string) => {
+    const deleteActivityRow = async (rowId: string) => {
         // Allow deleting any activity row (but Total row is not in activityRows)
         setActivityRows(prev => prev.filter(row => row.id !== rowId));
+        if (menuOpenRowId === rowId) setMenuOpenRowId(null);
+        
+        // Delete from Supabase
+        if (user) {
+            const { error } = await supabase
+                .from('activity_rows')
+                .delete()
+                .eq('id', rowId)
+                .eq('user_id', user.id);
+            
+            if (error) {
+                console.error('Error deleting activity row:', error);
+                loadActivityRows(); // Reload on error
+            }
+        }
+    };
+
+    const moveRowUp = (rowId: string) => {
+        setActivityRows(prev => {
+            const index = prev.findIndex(r => r.id === rowId);
+            if (index <= 0) return prev;
+            const newRows = [...prev];
+            const tmp = newRows[index - 1];
+            newRows[index - 1] = newRows[index];
+            newRows[index] = tmp;
+            return newRows;
+        });
+        setMenuOpenRowId(null);
+    };
+
+    const moveRowDown = (rowId: string) => {
+        setActivityRows(prev => {
+            const index = prev.findIndex(r => r.id === rowId);
+            if (index === -1 || index >= prev.length - 1) return prev;
+            const newRows = [...prev];
+            const tmp = newRows[index + 1];
+            newRows[index + 1] = newRows[index];
+            newRows[index] = tmp;
+            return newRows;
+        });
+        setMenuOpenRowId(null);
     };
 
     // Generate AI analysis for the week
@@ -247,11 +434,22 @@ export default function Home() {
 
             setAiAnalysis(analysis);
             
-            // Cache the analysis
-            const currentWeekKey = currentWeek[0]?.toISOString().split('T')[0] || '';
-            if (analysis) {
-                localStorage.setItem(`ai_analysis_${currentWeekKey}`, analysis);
-                setLastAnalysisWeek(currentWeekKey);
+            // Cache the analysis in Supabase
+            if (user) {
+                const currentWeekKey = currentWeek[0]?.toISOString().split('T')[0] || '';
+                if (analysis) {
+                    const { error } = await supabase
+                        .from('weekly_analyses')
+                        .upsert({
+                            user_id: user.id,
+                            week_start: currentWeekKey,
+                            analysis_text: analysis,
+                        }, { onConflict: 'user_id,week_start' });
+                    
+                    if (!error) {
+                        setLastAnalysisWeek(currentWeekKey);
+                    }
+                }
             }
             
         } catch (error) {
@@ -271,15 +469,26 @@ export default function Home() {
         setWeekCompleted(true);
     };
 
-    // Load cached analysis on component mount
+    // Load cached analysis from Supabase on component mount
     useEffect(() => {
-        const currentWeekKey = currentWeek[0]?.toISOString().split('T')[0] || '';
-        const cachedAnalysis = localStorage.getItem(`ai_analysis_${currentWeekKey}`);
-        if (cachedAnalysis) {
-            setAiAnalysis(cachedAnalysis);
-            setLastAnalysisWeek(currentWeekKey);
+        if (user) {
+            const currentWeekKey = currentWeek[0]?.toISOString().split('T')[0] || '';
+            const loadAnalysis = async () => {
+                const { data, error } = await supabase
+                    .from('weekly_analyses')
+                    .select('analysis_text')
+                    .eq('user_id', user.id)
+                    .eq('week_start', currentWeekKey)
+                    .single();
+                
+                if (!error && data) {
+                    setAiAnalysis(data.analysis_text);
+                    setLastAnalysisWeek(currentWeekKey);
+                }
+            };
+            loadAnalysis();
         }
-    }, [currentWeek]);
+    }, [currentWeek, user]);
 
     // Utility to get ISO week number
     function getISOWeekNumber(date: Date): number {
@@ -297,12 +506,41 @@ export default function Home() {
         );
     }
 
+    const menuRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
+    useEffect(() => {
+        if (menuOpenRowId) {
+            const handleClick = (event: MouseEvent) => {
+                const menu = menuRefs.current[menuOpenRowId];
+                if (menu && !menu.contains(event.target as Node)) {
+                    setMenuOpenRowId(null);
+                }
+            };
+            document.addEventListener('mousedown', handleClick);
+            return () => {
+                document.removeEventListener('mousedown', handleClick);
+            };
+        }
+    }, [menuOpenRowId]);
+
+    const handleLogout = async () => {
+        await supabase.auth.signOut();
+        setUser(null);
+        setSession(null);
+        setActivityRows([]);
+        setNeedsMigration(false);
+    };
+
     if (isLoading) {
         return (
             <div className='min-h-screen bg-slate-800 flex items-center justify-center'>
                 <div className='text-white text-xl'>Loading...</div>
             </div>
         );
+    }
+
+    // Show auth form if not logged in
+    if (!user) {
+        return <AuthForm onAuthSuccess={() => {}} />;
     }
 
     return (
@@ -312,7 +550,36 @@ export default function Home() {
                 <div className='text-center mb-6'>
                     <h1 className='text-2xl sm:text-4xl font-bold text-white mb-2'>Activity Tracker</h1>
                     <p className='text-white text-sm sm:text-lg'>Track your daily activities and stay motivated!</p>
+                    <div className='mt-2 flex justify-center'>
+                        <button
+                            onClick={handleLogout}
+                            className='text-slate-400 hover:text-white text-sm transition-colors'
+                        >
+                            Logout
+                        </button>
+                    </div>
                 </div>
+
+                {/* Migration Banner */}
+                {needsMigration && (
+                    <div className='bg-blue-600 rounded-lg p-4 mb-6 text-center'>
+                        <p className='text-white mb-2'>
+                            We found local data in your browser. Would you like to migrate it to the cloud?
+                        </p>
+                        <button
+                            onClick={migrateLocalStorageData}
+                            className='bg-white text-blue-600 px-4 py-2 rounded-lg hover:bg-blue-50 transition-colors font-medium'
+                        >
+                            Migrate Data
+                        </button>
+                        <button
+                            onClick={() => setNeedsMigration(false)}
+                            className='ml-2 text-blue-100 hover:text-white transition-colors'
+                        >
+                            Skip
+                        </button>
+                    </div>
+                )}
 
                 {/* Statistics */}
                 <div className='grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-6'>
@@ -384,7 +651,7 @@ export default function Home() {
 
                     {/* Activity Rows */}
                     <div className='space-y-4 sm:space-y-6'>
-                        {activityRows.map(row => (
+                        {activityRows.map((row, index) => (
                             <div key={row.id} className='grid grid-cols-9 gap-1 sm:gap-2 items-center'>
                                 {/* Activity Emoji and Name */}
                                 <div className='flex items-center space-x-1 sm:space-x-2'>
@@ -421,13 +688,43 @@ export default function Home() {
                                 })}
 
                                 {/* Delete Button */}
-                                <div className='flex justify-center'>
+                                <div className='flex justify-center relative'>
                                     <button
-                                        onClick={() => deleteActivityRow(row.id)}
-                                        className='text-red-400 py-2 px-4 hover:text-red-300 text-lg sm:text-xl font-bold cursor-pointer'
+                                        onClick={() => setMenuOpenRowId(menuOpenRowId === row.id ? null : row.id)}
+                                        className='text-slate-300 py-2 px-3 hover:text-white text-xl font-bold cursor-pointer'
+                                        aria-haspopup='menu'
+                                        aria-expanded={menuOpenRowId === row.id}
+                                        aria-label='Row options'
                                     >
-                                        X
+                                        ⋯
                                     </button>
+                                    {menuOpenRowId === row.id && (
+                                        <div
+                                            ref={el => { menuRefs.current[row.id] = el; }}
+                                            className='absolute z-10 mt-1 right-0 bg-slate-800 border border-slate-700 rounded-md shadow-lg w-40 text-sm'
+                                        >
+                                            <button
+                                                className='w-full text-left px-3 py-2 hover:bg-slate-700 text-red-400 hover:text-red-300 cursor-pointer rounded-t-md'
+                                                onClick={() => deleteActivityRow(row.id)}
+                                            >
+                                                Remove
+                                            </button>
+                                            <button
+                                                className={`w-full text-left px-3 py-2 hover:bg-slate-700 text-white cursor-pointer ${index === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                                onClick={() => index === 0 ? null : moveRowUp(row.id)}
+                                                disabled={index === 0}
+                                            >
+                                                Move up
+                                            </button>
+                                            <button
+                                                className={`w-full text-left px-3 py-2 hover:bg-slate-700 text-white cursor-pointer rounded-b-md ${index === activityRows.length - 1 ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                                onClick={() => index === activityRows.length - 1 ? null : moveRowDown(row.id)}
+                                                disabled={index === activityRows.length - 1}
+                                            >
+                                                Move down
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         ))}
