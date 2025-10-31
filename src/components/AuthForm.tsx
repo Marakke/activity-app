@@ -53,12 +53,8 @@ export default function AuthForm({ onAuthSuccess }: AuthFormProps) {
     return (
         <div className='min-h-screen bg-slate-800 flex items-center justify-center p-4'>
             <div className='bg-slate-700 rounded-lg p-8 w-full max-w-md shadow-lg'>
-                <h2 className='text-3xl font-bold text-white mb-2 text-center'>
-                    Activity Tracker
-                </h2>
-                <p className='text-slate-300 text-center mb-8'>
-                    {isLogin ? 'Welcome back!' : 'Create your account'}
-                </p>
+                <h2 className='text-3xl font-bold text-white mb-2 text-center'>Activity Tracker</h2>
+                <p className='text-slate-300 text-center mb-8'>{isLogin ? 'Welcome back!' : 'Create your account'}</p>
 
                 <form onSubmit={handleAuth} className='space-y-4'>
                     <div>
@@ -69,7 +65,7 @@ export default function AuthForm({ onAuthSuccess }: AuthFormProps) {
                             id='email'
                             type='email'
                             value={email}
-                            onChange={(e) => setEmail(e.target.value)}
+                            onChange={e => setEmail(e.target.value)}
                             required
                             className='w-full px-4 py-2 rounded-lg bg-slate-600 text-white placeholder-slate-400 border border-slate-500 focus:border-blue-500 focus:outline-none'
                             placeholder='your@email.com'
@@ -84,7 +80,7 @@ export default function AuthForm({ onAuthSuccess }: AuthFormProps) {
                             id='password'
                             type='password'
                             value={password}
-                            onChange={(e) => setPassword(e.target.value)}
+                            onChange={e => setPassword(e.target.value)}
                             required
                             minLength={6}
                             className='w-full px-4 py-2 rounded-lg bg-slate-600 text-white placeholder-slate-400 border border-slate-500 focus:border-blue-500 focus:outline-none'
@@ -129,4 +125,3 @@ export default function AuthForm({ onAuthSuccess }: AuthFormProps) {
         </div>
     );
 }
-

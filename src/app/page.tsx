@@ -45,7 +45,9 @@ export default function Home() {
             setIsLoading(false);
         });
 
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+        const {
+            data: { subscription },
+        } = supabase.auth.onAuthStateChange((_event, session) => {
             setSession(session);
             setUser(session?.user ?? null);
         });
@@ -78,7 +80,7 @@ export default function Home() {
 
     const loadActivityRows = async () => {
         if (!user) return;
-        
+
         setIsLoadingFromDB(true);
         const { data, error } = await supabase
             .from('activity_rows')
@@ -105,13 +107,9 @@ export default function Home() {
 
     const checkForMigration = async () => {
         if (!user) return;
-        
+
         // Check if user has data in Supabase already
-        const { data } = await supabase
-            .from('activity_rows')
-            .select('id')
-            .eq('user_id', user.id)
-            .limit(1);
+        const { data } = await supabase.from('activity_rows').select('id').eq('user_id', user.id).limit(1);
 
         // If no Supabase data but localStorage has data, offer migration
         if (!data || data.length === 0) {
@@ -124,7 +122,7 @@ export default function Home() {
 
     const migrateLocalStorageData = async () => {
         if (!user) return;
-        
+
         const savedRows = localStorage.getItem('activityRows');
         if (!savedRows) return;
 
@@ -140,16 +138,17 @@ export default function Home() {
             // Migrate each row to Supabase
             for (let i = 0; i < validRows.length; i++) {
                 const row = validRows[i];
-                const { error } = await supabase
-                    .from('activity_rows')
-                    .upsert({
+                const { error } = await supabase.from('activity_rows').upsert(
+                    {
                         id: row.id,
                         user_id: user.id,
                         name: row.name,
                         emoji: row.emoji,
                         completed_days: row.completedDays,
                         order_index: i,
-                    }, { onConflict: 'id' });
+                    },
+                    { onConflict: 'id' }
+                );
 
                 if (error) {
                     console.error('Error migrating row:', error);
@@ -160,13 +159,14 @@ export default function Home() {
             const savedAnalysis = localStorage.getItem('ai_analysis_' + currentWeek[0]?.toISOString().split('T')[0]);
             if (savedAnalysis) {
                 const currentWeekKey = currentWeek[0]?.toISOString().split('T')[0];
-                const { error } = await supabase
-                    .from('weekly_analyses')
-                    .upsert({
+                const { error } = await supabase.from('weekly_analyses').upsert(
+                    {
                         user_id: user.id,
                         week_start: currentWeekKey,
                         analysis_text: savedAnalysis,
-                    }, { onConflict: 'user_id,week_start' });
+                    },
+                    { onConflict: 'user_id,week_start' }
+                );
 
                 if (error) {
                     console.error('Error migrating analysis:', error);
@@ -176,7 +176,7 @@ export default function Home() {
             // Clear migration flag and reload
             setNeedsMigration(false);
             loadActivityRows();
-            
+
             alert('Migration complete! Your data has been saved to the cloud.');
         } catch (error) {
             console.error('Error during migration:', error);
@@ -190,7 +190,13 @@ export default function Home() {
         if (user && activityRows.length > 0 && !isLoadingFromDB) {
             activityRows.forEach(async (row, index) => {
                 try {
-                    console.log('Saving row:', { id: row.id, name: row.name, emoji: row.emoji, completedDays: row.completedDays, user_id: user.id });
+                    console.log('Saving row:', {
+                        id: row.id,
+                        name: row.name,
+                        emoji: row.emoji,
+                        completedDays: row.completedDays,
+                        user_id: user.id,
+                    });
                     const payload = {
                         id: row.id,
                         user_id: user.id,
@@ -200,9 +206,7 @@ export default function Home() {
                         order_index: index,
                     };
                     console.log('Payload:', JSON.stringify(payload));
-                    const { error, data } = await supabase
-                        .from('activity_rows')
-                        .upsert(payload, { onConflict: 'id' });
+                    const { error, data } = await supabase.from('activity_rows').upsert(payload, { onConflict: 'id' });
 
                     if (error) {
                         console.error('Error saving activity row');
@@ -299,12 +303,12 @@ export default function Home() {
 
         // Group by week
         const weekGroups: { [key: string]: string[] } = {};
-        
+
         allCompletedDays.forEach(dateStr => {
             const date = new Date(dateStr);
             const weekStart = getWeekStartDate(date);
             const weekKey = weekStart.toISOString().split('T')[0];
-            
+
             if (!weekGroups[weekKey]) {
                 weekGroups[weekKey] = [];
             }
@@ -315,7 +319,7 @@ export default function Home() {
         const trendData = Object.entries(weekGroups)
             .map(([week, dates]) => ({
                 week: week,
-                count: dates.length
+                count: dates.length,
             }))
             .sort((a, b) => a.week.localeCompare(b.week));
 
@@ -346,15 +350,11 @@ export default function Home() {
         // Allow deleting any activity row (but Total row is not in activityRows)
         setActivityRows(prev => prev.filter(row => row.id !== rowId));
         if (menuOpenRowId === rowId) setMenuOpenRowId(null);
-        
+
         // Delete from Supabase
         if (user) {
-            const { error } = await supabase
-                .from('activity_rows')
-                .delete()
-                .eq('id', rowId)
-                .eq('user_id', user.id);
-            
+            const { error } = await supabase.from('activity_rows').delete().eq('id', rowId).eq('user_id', user.id);
+
             if (error) {
                 console.error('Error deleting activity row:', error);
                 loadActivityRows(); // Reload on error
@@ -395,31 +395,31 @@ export default function Home() {
             const totalActivities = getTotalActivities();
             const activeDays = getActiveDays();
             const averagePerDay = getAverageActivities();
-            
+
             const fallbackAnalysis = `This week you completed ${totalActivities} activities across ${activeDays} days, averaging ${averagePerDay} activities per day. ${
                 activeDays >= 5 ? 'Great consistency!' : 'Keep building those healthy habits!'
             }`;
-            
+
             setAiAnalysis(fallbackAnalysis);
             return;
         }
 
         setIsGeneratingAnalysis(true);
-        
+
         try {
             const weekData = {
                 activities: activityRows.map(row => ({
                     name: row.name,
                     emoji: row.emoji,
                     completedDays: row.completedDays,
-                    totalThisWeek: row.completedDays.length
+                    totalThisWeek: row.completedDays.length,
                 })),
                 weekStats: {
                     totalActivities: getTotalActivities(),
                     activeDays: getActiveDays(),
-                    averagePerDay: getAverageActivities()
+                    averagePerDay: getAverageActivities(),
                 },
-                weekRange: `${currentWeek[0]?.toLocaleDateString()} to ${currentWeek[6]?.toLocaleDateString()}`
+                weekRange: `${currentWeek[0]?.toLocaleDateString()} to ${currentWeek[6]?.toLocaleDateString()}`,
             };
 
             const prompt = `Analyze this week's activity data and provide a brief, motivational summary (2-3 sentences). Focus on patterns, achievements, and encouragement. Be positive and specific about what they accomplished. Data: ${JSON.stringify(weekData)}`;
@@ -427,37 +427,39 @@ export default function Home() {
             // Use the new Google GenAI SDK
             const response = await ai.models.generateContent({
                 model: 'gemini-2.0-flash-001',
-                contents: prompt
+                contents: prompt,
             });
-            
+
             const analysis = response.text || '';
 
             setAiAnalysis(analysis);
-            
+
             // Cache the analysis in Supabase
             if (user) {
                 const currentWeekKey = currentWeek[0]?.toISOString().split('T')[0] || '';
                 if (analysis) {
-                    const { error } = await supabase
-                        .from('weekly_analyses')
-                        .upsert({
+                    const { error } = await supabase.from('weekly_analyses').upsert(
+                        {
                             user_id: user.id,
                             week_start: currentWeekKey,
                             analysis_text: analysis,
-                        }, { onConflict: 'user_id,week_start' });
-                    
+                        },
+                        { onConflict: 'user_id,week_start' }
+                    );
+
                     if (!error) {
                         setLastAnalysisWeek(currentWeekKey);
                     }
                 }
             }
-            
         } catch (error) {
             console.error('Error generating AI analysis:', error);
             // Fallback to basic analysis
             const totalActivities = getTotalActivities();
             const activeDays = getActiveDays();
-            setAiAnalysis(`This week you completed ${totalActivities} activities across ${activeDays} days. Keep up the great work!`);
+            setAiAnalysis(
+                `This week you completed ${totalActivities} activities across ${activeDays} days. Keep up the great work!`
+            );
         } finally {
             setIsGeneratingAnalysis(false);
         }
@@ -480,7 +482,7 @@ export default function Home() {
                     .eq('user_id', user.id)
                     .eq('week_start', currentWeekKey)
                     .single();
-                
+
                 if (!error && data) {
                     setAiAnalysis(data.analysis_text);
                     setLastAnalysisWeek(currentWeekKey);
@@ -499,11 +501,7 @@ export default function Home() {
         // January 4 is always in week 1.
         const week1 = new Date(tempDate.getFullYear(), 0, 4);
         // Adjust to Thursday in week 1 and count number of weeks from date to week1.
-        return (
-            1 + Math.round(
-                ((tempDate.getTime() - week1.getTime()) / 86400000 - 3 + ((week1.getDay() + 6) % 7)) / 7
-            )
-        );
+        return 1 + Math.round(((tempDate.getTime() - week1.getTime()) / 86400000 - 3 + ((week1.getDay() + 6) % 7)) / 7);
     }
 
     const menuRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
@@ -584,15 +582,25 @@ export default function Home() {
                 {/* Statistics */}
                 <div className='grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-6'>
                     <div className='bg-slate-700 rounded-lg p-4 sm:p-6 shadow-md text-center'>
-                        <h3 className='text-sm sm:text-lg font-semibold text-white mb-1 sm:mb-2 text-center'>Total Activities</h3>
-                        <p className='text-2xl sm:text-3xl font-bold text-blue-400 text-center'>{getTotalActivities()}</p>
+                        <h3 className='text-sm sm:text-lg font-semibold text-white mb-1 sm:mb-2 text-center'>
+                            Total Activities
+                        </h3>
+                        <p className='text-2xl sm:text-3xl font-bold text-blue-400 text-center'>
+                            {getTotalActivities()}
+                        </p>
                     </div>
                     <div className='bg-slate-700 rounded-lg p-4 sm:p-6 shadow-md text-center'>
-                        <h3 className='text-sm sm:text-lg font-semibold text-white mb-1 sm:mb-2 text-center'>Average per Day</h3>
-                        <p className='text-2xl sm:text-3xl font-bold text-green-400 text-center'>{getAverageActivities()}</p>
+                        <h3 className='text-sm sm:text-lg font-semibold text-white mb-1 sm:mb-2 text-center'>
+                            Average per Day
+                        </h3>
+                        <p className='text-2xl sm:text-3xl font-bold text-green-400 text-center'>
+                            {getAverageActivities()}
+                        </p>
                     </div>
                     <div className='bg-slate-700 rounded-lg p-4 sm:p-6 shadow-md text-center'>
-                        <h3 className='text-sm sm:text-lg font-semibold text-white mb-1 sm:mb-2 text-center'>Active Days</h3>
+                        <h3 className='text-sm sm:text-lg font-semibold text-white mb-1 sm:mb-2 text-center'>
+                            Active Days
+                        </h3>
                         <p className='text-2xl sm:text-3xl font-bold text-purple-400 text-center'>{getActiveDays()}</p>
                     </div>
                 </div>
@@ -614,7 +622,9 @@ export default function Home() {
                                         }`}
                                     >
                                         <div>{date.toLocaleDateString('en-US', { weekday: 'short' })}</div>
-                                        <div className='text-xs'>{date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</div>
+                                        <div className='text-xs'>
+                                            {date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                                        </div>
                                     </div>
                                 </div>
                             );
@@ -631,14 +641,12 @@ export default function Home() {
                         {currentWeek.map((date, index) => {
                             const totalCount = getTotalActivitiesForDay(date);
                             const isCurrentDay = isToday(date);
-                            
+
                             return (
                                 <div key={index} className='flex justify-center'>
                                     <div
                                         className={`w-8 h-8 sm:w-10 sm:h-10 rounded flex items-center justify-center text-sm sm:text-base font-bold ${
-                                            isCurrentDay
-                                                ? 'bg-slate-500 border-2 border-blue-400'
-                                                : 'bg-slate-600'
+                                            isCurrentDay ? 'bg-slate-500 border-2 border-blue-400' : 'bg-slate-600'
                                         }`}
                                     >
                                         <span className='text-white'>{totalCount}</span>
@@ -656,7 +664,9 @@ export default function Home() {
                                 {/* Activity Emoji and Name */}
                                 <div className='flex items-center space-x-1 sm:space-x-2'>
                                     <span className='text-xl sm:text-2xl'>{row.emoji}</span>
-                                    <span className='text-white text-xs sm:text-sm font-medium hidden sm:block'>{row.name}</span>
+                                    <span className='text-white text-xs sm:text-sm font-medium hidden sm:block'>
+                                        {row.name}
+                                    </span>
                                 </div>
 
                                 {/* Day Checkboxes */}
@@ -677,11 +687,13 @@ export default function Home() {
                                                         : isCurrentDay
                                                           ? 'bg-gray-100 hover:bg-gray-200 border-2 border-blue-400'
                                                           : isDisabled
-                                                          ? 'bg-slate-800 cursor-not-allowed opacity-50'
-                                                          : 'bg-gray-100 hover:bg-gray-200 border border-gray-300'
+                                                            ? 'bg-slate-800 cursor-not-allowed opacity-50'
+                                                            : 'bg-gray-100 hover:bg-gray-200 border border-gray-300'
                                                 }`}
                                             >
-                                                {isCompleted && <span className='text-black text-lg sm:text-xl font-bold'>✓</span>}
+                                                {isCompleted && (
+                                                    <span className='text-black text-lg sm:text-xl font-bold'>✓</span>
+                                                )}
                                             </button>
                                         </div>
                                     );
@@ -700,7 +712,9 @@ export default function Home() {
                                     </button>
                                     {menuOpenRowId === row.id && (
                                         <div
-                                            ref={el => { menuRefs.current[row.id] = el; }}
+                                            ref={el => {
+                                                menuRefs.current[row.id] = el;
+                                            }}
                                             className='absolute z-10 mt-1 right-0 bg-slate-800 border border-slate-700 rounded-md shadow-lg w-40 text-sm'
                                         >
                                             <button
@@ -711,14 +725,16 @@ export default function Home() {
                                             </button>
                                             <button
                                                 className={`w-full text-left px-3 py-2 hover:bg-slate-700 text-white cursor-pointer ${index === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                                onClick={() => index === 0 ? null : moveRowUp(row.id)}
+                                                onClick={() => (index === 0 ? null : moveRowUp(row.id))}
                                                 disabled={index === 0}
                                             >
                                                 Move up
                                             </button>
                                             <button
                                                 className={`w-full text-left px-3 py-2 hover:bg-slate-700 text-white cursor-pointer rounded-b-md ${index === activityRows.length - 1 ? 'opacity-50 cursor-not-allowed' : ''}`}
-                                                onClick={() => index === activityRows.length - 1 ? null : moveRowDown(row.id)}
+                                                onClick={() =>
+                                                    index === activityRows.length - 1 ? null : moveRowDown(row.id)
+                                                }
                                                 disabled={index === activityRows.length - 1}
                                             >
                                                 Move down
@@ -735,7 +751,8 @@ export default function Home() {
                 {activityRows.length === 0 && (
                     <div className='text-center mb-4 sm:mb-6 p-4 bg-slate-700 rounded-lg'>
                         <p className='text-slate-300 text-sm sm:text-base'>
-                            <strong>Get started:</strong> Add your first activity row below to begin tracking your daily activities!
+                            <strong>Get started:</strong> Add your first activity row below to begin tracking your daily
+                            activities!
                         </p>
                     </div>
                 )}
@@ -752,16 +769,20 @@ export default function Home() {
                                 <span>+</span>
                             </button>
                             <button
-                                onClick={async () => { setShowAnalysis(true); await completeWeek(); }}
+                                onClick={async () => {
+                                    setShowAnalysis(true);
+                                    await completeWeek();
+                                }}
                                 disabled={isGeneratingAnalysis || weekCompleted}
                                 className='w-full py-3 px-4 bg-sky-500/75 text-white rounded-lg hover:bg-sky-500 transition-colors font-medium flex items-center justify-center cursor-pointer disabled:bg-slate-700 disabled:cursor-not-allowed gap-2'
                             >
-                                <span>{weekCompleted
-                                    ? 'Week completed!'
-                                    : isGeneratingAnalysis
-                                        ? 'Completing...'
-                                        : 'Complete week'
-                                }</span>
+                                <span>
+                                    {weekCompleted
+                                        ? 'Week completed!'
+                                        : isGeneratingAnalysis
+                                          ? 'Completing...'
+                                          : 'Complete week'}
+                                </span>
                                 <span>{!isGeneratingAnalysis || weekCompleted ? '✓' : ''}</span>
                             </button>
                         </div>
@@ -769,7 +790,9 @@ export default function Home() {
                         <div className='space-y-4'>
                             <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
                                 <div>
-                                    <label className='block font-medium text-white mb-2 text-base '>Activity Name</label>
+                                    <label className='block font-medium text-white mb-2 text-base '>
+                                        Activity Name
+                                    </label>
                                     <input
                                         type='text'
                                         value={newRowName}
@@ -837,38 +860,41 @@ export default function Home() {
                 {/* Weekly Trend Section */}
                 {getWeeklyTrendData().length > 0 && (
                     <div className='bg-slate-700 rounded-lg p-4 sm:p-6 mb-6'>
-                        <h3 className='text-lg font-semibold text-white mb-4 flex items-center'>
-                            📈 Activity Trend
-                        </h3>
-                        
+                        <h3 className='text-lg font-semibold text-white mb-4 flex items-center'>📈 Activity Trend</h3>
+
                         <div className='space-y-4'>
                             {/* Combined Bar Chart + Line Graph */}
                             <div className='bg-slate-800 rounded-lg pb-2'>
                                 {/* Chart Area */}
                                 <div className='relative h-32 sm:h-40'>
                                     {/* Line Graph */}
-                                    <svg className='absolute inset-0 w-full h-full' style={{ zIndex: 10, overflow: 'visible' }}>
+                                    <svg
+                                        className='absolute inset-0 w-full h-full'
+                                        style={{ zIndex: 10, overflow: 'visible' }}
+                                    >
                                         {getWeeklyTrendData().map((data, index) => {
                                             if (index === 0) return null;
-                                            
+
                                             const maxCount = getMaxWeeklyCount();
                                             const prevData = getWeeklyTrendData()[index - 1];
-                                            
+
                                             // Account for padding: use 85% of height for chart, 10% top padding, 5% bottom padding
                                             const chartHeight = 85;
                                             const topPadding = 10;
-                                            
-                                            const prevHeight = maxCount > 0 ? (prevData.count / maxCount) * chartHeight : 0;
-                                            const currentHeight = maxCount > 0 ? (data.count / maxCount) * chartHeight : 0;
-                                            
+
+                                            const prevHeight =
+                                                maxCount > 0 ? (prevData.count / maxCount) * chartHeight : 0;
+                                            const currentHeight =
+                                                maxCount > 0 ? (data.count / maxCount) * chartHeight : 0;
+
                                             const barWidth = 100 / getWeeklyTrendData().length;
                                             const prevX = (index - 1) * barWidth + barWidth / 2;
                                             const currentX = index * barWidth + barWidth / 2;
-                                            
+
                                             // Y positions with padding: invert and add top padding
                                             const prevY = topPadding + (chartHeight - prevHeight);
                                             const currentY = topPadding + (chartHeight - currentHeight);
-                                            
+
                                             return (
                                                 <line
                                                     key={`line-${index}`}
@@ -882,20 +908,20 @@ export default function Home() {
                                                 />
                                             );
                                         })}
-                                        
+
                                         {/* Data points */}
                                         {getWeeklyTrendData().map((data, index) => {
                                             const maxCount = getMaxWeeklyCount();
                                             // Account for padding: use 85% of height for chart, 10% top padding, 5% bottom padding
                                             const chartHeight = 85;
                                             const topPadding = 10;
-                                            
+
                                             const height = maxCount > 0 ? (data.count / maxCount) * chartHeight : 0;
                                             const barWidth = 100 / getWeeklyTrendData().length;
                                             const x = index * barWidth + barWidth / 2;
                                             // Y position with padding: invert and add top padding
                                             const y = topPadding + (chartHeight - height);
-                                            
+
                                             return (
                                                 <circle
                                                     key={`point-${index}`}
@@ -910,14 +936,17 @@ export default function Home() {
                                         })}
                                     </svg>
                                 </div>
-                                
+
                                 {/* Labels below chart */}
                                 <div className='flex justify-between mt-3'>
                                     {getWeeklyTrendData().map((data, index) => {
                                         const weekDate = new Date(data.week);
                                         const weekLabel = `Week ${getISOWeekNumber(weekDate)}`;
                                         return (
-                                            <div key={data.week} className='flex flex-col items-center flex-1 text-center'>
+                                            <div
+                                                key={data.week}
+                                                className='flex flex-col items-center flex-1 text-center'
+                                            >
                                                 <div className='text-xs font-medium text-white mb-1'>{data.count}</div>
                                                 <div className='text-xs text-slate-300'>{weekLabel}</div>
                                             </div>
@@ -925,16 +954,18 @@ export default function Home() {
                                     })}
                                 </div>
                             </div>
-                            
+
                             {/* Trend Summary */}
                             <div className='grid grid-cols-2 sm:grid-cols-2 gap-4 text-center'>
                                 <div className='bg-slate-800 rounded-lg p-3 sm:col-span-1 col-span-2'>
                                     <div className='text-sm text-slate-300'>Average / week</div>
                                     <div className='text-lg font-bold text-blue-400'>
-                                        {getWeeklyTrendData().length > 0 
-                                            ? Math.round(getWeeklyTrendData().reduce((sum, d) => sum + d.count, 0) / getWeeklyTrendData().length)
-                                            : 0
-                                        }
+                                        {getWeeklyTrendData().length > 0
+                                            ? Math.round(
+                                                  getWeeklyTrendData().reduce((sum, d) => sum + d.count, 0) /
+                                                      getWeeklyTrendData().length
+                                              )
+                                            : 0}
                                     </div>
                                 </div>
                                 <div className='bg-slate-800 rounded-lg p-3 flex flex-col items-center'>
@@ -943,19 +974,17 @@ export default function Home() {
                                         {(() => {
                                             const data = getWeeklyTrendData();
                                             if (data.length < 2) {
-                                                return (
-                                                    <span className="text-slate-400">–</span>
-                                                );
+                                                return <span className='text-slate-400'>–</span>;
                                             }
                                             const thisWeek = data[data.length - 1]?.count ?? 0;
                                             const lastWeek = data[data.length - 2]?.count ?? 0;
                                             const diff = thisWeek - lastWeek;
                                             if (diff === 0) {
-                                                return <span className="text-slate-400">0</span>;
+                                                return <span className='text-slate-400'>0</span>;
                                             } else if (diff > 0) {
-                                                return <span className="text-green-400">+{diff}</span>;
+                                                return <span className='text-green-400'>+{diff}</span>;
                                             } else {
-                                                return <span className="text-red-400">{diff}</span>;
+                                                return <span className='text-red-400'>{diff}</span>;
                                             }
                                         })()}
                                     </div>
@@ -973,16 +1002,14 @@ export default function Home() {
                                 🤖 AI Weekly Analysis
                             </h3>
                         </div>
-                        
+
                         {isGeneratingAnalysis ? (
                             <div className='flex items-center space-x-2 text-slate-300'>
                                 <div className='animate-spin rounded-full h-4 w-4 border-b-2 border-purple-400'></div>
                                 <span>Analyzing your week...</span>
                             </div>
                         ) : aiAnalysis ? (
-                            <div className='text-slate-200 leading-relaxed'>
-                                {aiAnalysis}
-                            </div>
+                            <div className='text-slate-200 leading-relaxed'>{aiAnalysis}</div>
                         ) : null}
                     </div>
                 )}
