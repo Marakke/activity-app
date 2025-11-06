@@ -221,14 +221,22 @@ export default function Home() {
     }, [activityRows, user, isLoadingFromDB]);
 
     const isActivityCompleted = (rowId: string, date: Date): boolean => {
-        const dateStr = date.toISOString().split('T')[0];
+        const dateStr = formatDateLocal(date);
         const row = activityRows.find(row => row.id === rowId);
         if (!row || !row.completedDays) return false;
         return row.completedDays.includes(dateStr);
     };
 
+    // Helper function to format date as YYYY-MM-DD in local timezone
+    const formatDateLocal = (date: Date): string => {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    };
+
     const toggleActivityCompletion = (rowId: string, date: Date) => {
-        const dateStr = date.toISOString().split('T')[0];
+        const dateStr = formatDateLocal(date);
         setActivityRows(prev => {
             return prev.map(row => {
                 if (row.id === rowId) {
@@ -256,22 +264,61 @@ export default function Home() {
         }, 0);
     };
 
-    const getAverageActivities = (): number => {
-        const totalActivities = getTotalActivities();
-        // Only count days up to today (including today)
-        const today = new Date();
-        const daysUpToToday = currentWeek.filter(date => date <= today).length;
-        return daysUpToToday > 0 ? Math.round((totalActivities / daysUpToToday) * 10) / 10 : 0;
-    };
+    const getCurrentStreak = (): number => {
+        if (activityRows.length === 0) return 0;
 
-    const getActiveDays = (): number => {
         const allCompletedDays = activityRows.flatMap(row => row.completedDays || []);
         const uniqueDates = new Set(allCompletedDays);
-        return uniqueDates.size;
+
+        if (uniqueDates.size === 0) return 0;
+
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        // Always start from today, but if today has no activities, don't count it
+        // Continue from yesterday - streak only breaks when there's a gap in the past
+        const currentDate = new Date(today);
+        let streak = 0;
+        let foundFirstActivity = false;
+        const maxDaysToCheck = 365; // Prevent infinite loops
+
+        for (let i = 0; i < maxDaysToCheck; i++) {
+            const dateStr = formatDateLocal(currentDate);
+
+            if (uniqueDates.has(dateStr)) {
+                streak++;
+                foundFirstActivity = true;
+                // Move to previous day
+                currentDate.setDate(currentDate.getDate() - 1);
+            } else {
+                // If we've already found at least one activity, break the streak
+                // If we haven't found any activities yet, continue checking backwards until we find the first activity
+                if (foundFirstActivity) {
+                    // Streak broken - we found activities but then hit a gap
+                    break;
+                } else {
+                    // Haven't found any activities yet, continue checking backwards
+                    currentDate.setDate(currentDate.getDate() - 1);
+                }
+            }
+        }
+
+        return streak;
+    };
+
+    const getActiveDaysForWeek = (): number => {
+        const allCompletedDays = activityRows.flatMap(row => row.completedDays || []);
+        const uniqueDates = new Set(allCompletedDays);
+
+        // Count only days in the current week
+        const weekDates = currentWeek.map(date => date.toISOString().split('T')[0]);
+        const activeDaysInWeek = weekDates.filter(dateStr => uniqueDates.has(dateStr));
+
+        return activeDaysInWeek.length;
     };
 
     const getTotalActivitiesForDay = (date: Date): number => {
-        const dateStr = date.toISOString().split('T')[0];
+        const dateStr = formatDateLocal(date);
         return activityRows.reduce((total, row) => {
             return total + (row.completedDays?.includes(dateStr) ? 1 : 0);
         }, 0);
@@ -326,6 +373,15 @@ export default function Home() {
     const getMaxWeeklyCount = (): number => {
         const trendData = getWeeklyTrendData();
         return trendData.length > 0 ? Math.max(...trendData.map(d => d.count)) : 0;
+    };
+
+    const getAverageActivitiesPerWeek = (): number => {
+        const weeklyData = getWeeklyTrendData();
+        if (weeklyData.length === 0) return 0;
+
+        const totalActivities = weeklyData.reduce((sum, week) => sum + week.count, 0);
+        const average = totalActivities / weeklyData.length;
+        return Math.round(average * 10) / 10;
     };
 
     const addNewActivityRow = () => {
@@ -390,12 +446,13 @@ export default function Home() {
         if (!process.env.NEXT_PUBLIC_GEMINI_API_KEY) {
             // Fallback analysis if no API key
             const totalActivities = getTotalActivities();
-            const activeDays = getActiveDays();
-            const averagePerDay = getAverageActivities();
+            const activeDays = getActiveDaysForWeek();
+            const averagePerWeek = getAverageActivitiesPerWeek();
+            const streak = getCurrentStreak();
 
-            const fallbackAnalysis = `This week you completed ${totalActivities} activities across ${activeDays} days, averaging ${averagePerDay} activities per day. ${
-                activeDays >= 5 ? 'Great consistency!' : 'Keep building those healthy habits!'
-            }`;
+            const fallbackAnalysis = `This week you completed ${totalActivities} activities across ${activeDays} days. Your average is ${averagePerWeek} activities per week. ${
+                streak > 0 ? `You're on a ${streak}-day streak! 🔥` : ''
+            } ${activeDays >= 5 ? 'Great consistency!' : 'Keep building those healthy habits!'}`;
 
             setAiAnalysis(fallbackAnalysis);
             return;
@@ -413,8 +470,9 @@ export default function Home() {
                 })),
                 weekStats: {
                     totalActivities: getTotalActivities(),
-                    activeDays: getActiveDays(),
-                    averagePerDay: getAverageActivities(),
+                    activeDays: getActiveDaysForWeek(),
+                    currentStreak: getCurrentStreak(),
+                    averagePerWeek: getAverageActivitiesPerWeek(),
                 },
                 weekRange: `${currentWeek[0]?.toLocaleDateString()} to ${currentWeek[6]?.toLocaleDateString()}`,
             };
@@ -435,7 +493,7 @@ export default function Home() {
             if (user) {
                 const currentWeekKey = currentWeek[0]?.toISOString().split('T')[0] || '';
                 if (analysis) {
-                    const { error } = await supabase.from('weekly_analyses').upsert(
+                    await supabase.from('weekly_analyses').upsert(
                         {
                             user_id: user.id,
                             week_start: currentWeekKey,
@@ -451,9 +509,12 @@ export default function Home() {
             console.error('Error generating AI analysis:', error);
             // Fallback to basic analysis
             const totalActivities = getTotalActivities();
-            const activeDays = getActiveDays();
+            const activeDays = getActiveDaysForWeek();
+            const streak = getCurrentStreak();
             setAiAnalysis(
-                `This week you completed ${totalActivities} activities across ${activeDays} days. Keep up the great work!`
+                `This week you completed ${totalActivities} activities across ${activeDays} days. ${
+                    streak > 0 ? `You're on a ${streak}-day streak! 🔥 ` : ''
+                }Keep up the great work!`
             );
         } finally {
             setIsGeneratingAnalysis(false);
@@ -584,17 +645,22 @@ export default function Home() {
                     </div>
                     <div className='bg-slate-700 rounded-lg p-4 sm:p-6 shadow-md text-center'>
                         <h3 className='text-sm sm:text-lg font-semibold text-white mb-1 sm:mb-2 text-center'>
-                            Average per Day
+                            Average per Week
                         </h3>
                         <p className='text-2xl sm:text-3xl font-bold text-green-400 text-center'>
-                            {getAverageActivities()}
+                            {getAverageActivitiesPerWeek()}
                         </p>
                     </div>
                     <div className='bg-slate-700 rounded-lg p-4 sm:p-6 shadow-md text-center'>
                         <h3 className='text-sm sm:text-lg font-semibold text-white mb-1 sm:mb-2 text-center'>
-                            Active Days
+                            Current Streak
                         </h3>
-                        <p className='text-2xl sm:text-3xl font-bold text-purple-400 text-center'>{getActiveDays()}</p>
+                        <p className='text-2xl sm:text-3xl font-bold text-orange-500 text-center flex items-center justify-center'>
+                            {getCurrentStreak()}
+                            {getCurrentStreak() > 0 && (
+                                <span className='text-lg sm:text-xl ml-1 flex items-center'>🔥</span>
+                            )}
+                        </p>
                     </div>
                 </div>
 
