@@ -70,6 +70,14 @@ function normalizeTimeInput(value: string): string {
     return `${hours}:${minutes}`;
 }
 
+function parseNumberInput(value: string): number {
+    if (value == null) return NaN;
+    const normalized = value.replace(',', '.').trim();
+    if (normalized === '') return NaN;
+    const parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : NaN;
+}
+
 function formatMealTime(value: string): string {
     const match = value.match(/\d{2}:\d{2}/);
     if (match) {
@@ -197,13 +205,49 @@ export default function FoodDiaryPage() {
         return grouped;
     }, [meals]);
 
+    const computedTotalsByDay = useMemo(() => {
+        const totals: Record<string, DailyTotals> = {};
+        Object.entries(mealsByDay).forEach(([day, dayMeals]) => {
+            const aggregate = dayMeals.reduce(
+                (acc, meal) => {
+                    acc.total_calories += meal.calories ?? 0;
+                    acc.total_protein += meal.protein ?? 0;
+                    acc.total_carbs += meal.carbs ?? 0;
+                    acc.total_fats += meal.fats ?? 0;
+                    return acc;
+                },
+                {
+                    total_calories: 0,
+                    total_protein: 0,
+                    total_carbs: 0,
+                    total_fats: 0,
+                }
+            );
+
+            totals[day] = {
+                meal_day: day,
+                total_calories: aggregate.total_calories,
+                total_protein: aggregate.total_protein,
+                total_carbs: aggregate.total_carbs,
+                total_fats: aggregate.total_fats,
+            };
+        });
+        return totals;
+    }, [mealsByDay]);
+
     const totalsByDay = useMemo(() => {
         const dictionary: Record<string, DailyTotals> = {};
         dailyTotals.forEach(total => {
-            dictionary[formatDateKey(new Date(total.meal_day))] = total;
+            const key = formatDateKey(new Date(total.meal_day));
+            dictionary[key] = total;
         });
+
+        Object.entries(computedTotalsByDay).forEach(([day, totals]) => {
+            dictionary[day] = totals;
+        });
+
         return dictionary;
-    }, [dailyTotals]);
+    }, [dailyTotals, computedTotalsByDay]);
 
     const selectedDayKey = formatDateKey(selectedDate);
     const totalsForSelectedDay = totalsByDay[selectedDayKey];
@@ -258,15 +302,20 @@ export default function FoodDiaryPage() {
         if (!user) return;
         if (!mealName.trim()) return;
 
-        const parsedCalories = Number(calories);
-        const parsedProtein = Number(protein || 0);
-        const parsedCarbs = Number(carbs || 0);
-        const parsedFats = Number(fats || 0);
+        const parsedCaloriesRaw = parseNumberInput(calories);
+        const parsedProteinRaw = protein ? parseNumberInput(protein) : 0;
+        const parsedCarbsRaw = carbs ? parseNumberInput(carbs) : 0;
+        const parsedFatsRaw = fats ? parseNumberInput(fats) : 0;
 
-        if (Number.isNaN(parsedCalories) || parsedCalories < 0) return;
-        if (Number.isNaN(parsedProtein) || parsedProtein < 0) return;
-        if (Number.isNaN(parsedCarbs) || parsedCarbs < 0) return;
-        if (Number.isNaN(parsedFats) || parsedFats < 0) return;
+        if (Number.isNaN(parsedCaloriesRaw) || parsedCaloriesRaw < 0) return;
+        if (Number.isNaN(parsedProteinRaw) || parsedProteinRaw < 0) return;
+        if (Number.isNaN(parsedCarbsRaw) || parsedCarbsRaw < 0) return;
+        if (Number.isNaN(parsedFatsRaw) || parsedFatsRaw < 0) return;
+
+        const parsedCalories = Math.round(parsedCaloriesRaw);
+        const parsedProtein = Math.round(parsedProteinRaw);
+        const parsedCarbs = Math.round(parsedCarbsRaw);
+        const parsedFats = Math.round(parsedFatsRaw);
 
         const mealInput: MealInput = {
             meal_time: combineDateAndTime(selectedDate, mealTime || '12:00'),

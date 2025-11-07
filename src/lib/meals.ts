@@ -48,15 +48,22 @@ export async function getMealsForRange(userId: string, start: Date, end: Date): 
 }
 
 export async function upsertMeal(userId: string, meal: Partial<Meal> & MealInput & { id?: string }): Promise<Meal> {
+    const roundNumeric = (value: number | null | undefined): number => {
+        if (typeof value !== 'number' || Number.isNaN(value)) {
+            return 0;
+        }
+        return Math.round(value);
+    };
+
     const payload = {
         id: meal.id,
         user_id: userId,
         meal_time: meal.meal_time,
         meal_name: meal.meal_name,
-        calories: meal.calories,
-        protein: meal.protein,
-        carbs: meal.carbs,
-        fats: meal.fats,
+        calories: roundNumeric(meal.calories),
+        protein: roundNumeric(meal.protein),
+        carbs: roundNumeric(meal.carbs),
+        fats: roundNumeric(meal.fats),
         notes: meal.notes ?? null,
     };
 
