@@ -21,6 +21,21 @@ const formatDateKey = (date: Date): string => {
     return `${year}-${month}-${day}`;
 };
 
+const normalizeDateKey = (value: string): string => {
+    if (!value) return value;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        return value;
+    }
+
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+        return value;
+    }
+
+    parsed.setHours(0, 0, 0, 0);
+    return formatDateKey(parsed);
+};
+
 export default function Home() {
     const [user, setUser] = useState<User | null>(null);
     const [activityRows, setActivityRows] = useState<ActivityRow[]>([]);
@@ -105,7 +120,7 @@ export default function Home() {
                 id: row.id,
                 name: row.name,
                 emoji: row.emoji,
-                completedDays: row.completed_days || [],
+                completedDays: (row.completed_days || []).map(normalizeDateKey),
             }))
         );
         setIsLoadingFromDB(false);
@@ -272,38 +287,30 @@ export default function Home() {
         if (activityRows.length === 0) return 0;
 
         const allCompletedDays = activityRows.flatMap(row => row.completedDays || []);
-        const uniqueDates = new Set(allCompletedDays);
+        if (allCompletedDays.length === 0) return 0;
 
-        if (uniqueDates.size === 0) return 0;
+        const normalizedDates = new Set(allCompletedDays.map(normalizeDateKey));
 
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
-        // Always start from today, but if today has no activities, don't count it
-        // Continue from yesterday - streak only breaks when there's a gap in the past
+        const hasActivityOn = (date: Date) => normalizedDates.has(formatDateKey(date));
+
+        // Streaks must include an activity logged today.
+        if (!hasActivityOn(today)) {
+            return 0;
+        }
+
         const currentDate = new Date(today);
         let streak = 0;
-        let foundFirstActivity = false;
         const maxDaysToCheck = 365; // Prevent infinite loops
 
         for (let i = 0; i < maxDaysToCheck; i++) {
-            const dateStr = formatDateKey(currentDate);
-
-            if (uniqueDates.has(dateStr)) {
+            if (hasActivityOn(currentDate)) {
                 streak++;
-                foundFirstActivity = true;
-                // Move to previous day
                 currentDate.setDate(currentDate.getDate() - 1);
             } else {
-                // If we've already found at least one activity, break the streak
-                // If we haven't found any activities yet, continue checking backwards until we find the first activity
-                if (foundFirstActivity) {
-                    // Streak broken - we found activities but then hit a gap
-                    break;
-                } else {
-                    // Haven't found any activities yet, continue checking backwards
-                    currentDate.setDate(currentDate.getDate() - 1);
-                }
+                break;
             }
         }
 
@@ -312,7 +319,7 @@ export default function Home() {
 
     const getActiveDaysForWeek = (): number => {
         const allCompletedDays = activityRows.flatMap(row => row.completedDays || []);
-        const uniqueDates = new Set(allCompletedDays);
+        const uniqueDates = new Set(allCompletedDays.map(normalizeDateKey));
 
         // Count only days in the current week
         const weekDates = currentWeek.map(date => formatDateKey(date));
