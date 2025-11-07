@@ -179,9 +179,7 @@ export default function Home() {
             // Migrate AI analyses
             const firstWeekDay = currentWeek[0];
             const currentWeekKey = firstWeekDay ? formatDateKey(firstWeekDay) : undefined;
-            const savedAnalysis = currentWeekKey
-                ? localStorage.getItem('ai_analysis_' + currentWeekKey)
-                : null;
+            const savedAnalysis = currentWeekKey ? localStorage.getItem('ai_analysis_' + currentWeekKey) : null;
             if (currentWeekKey && savedAnalysis) {
                 const { error } = await supabase.from('weekly_analyses').upsert(
                     {

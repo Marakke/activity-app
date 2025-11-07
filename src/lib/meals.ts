@@ -86,11 +86,7 @@ export async function deleteMeal(userId: string, mealId: string): Promise<void> 
     }
 }
 
-export async function getDailyTotalsForRange(
-    userId: string,
-    start: Date,
-    end: Date
-): Promise<DailyTotals[]> {
+export async function getDailyTotalsForRange(userId: string, start: Date, end: Date): Promise<DailyTotals[]> {
     const { data, error } = await supabase
         .from('meal_daily_totals')
         .select('*')
@@ -106,4 +102,3 @@ export async function getDailyTotalsForRange(
 
     return data ?? [];
 }
-

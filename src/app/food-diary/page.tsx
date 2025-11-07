@@ -50,12 +50,18 @@ function normalizeTimeInput(value: string): string {
         if (digits.length >= 3) {
             const hoursPart = digits.slice(0, digits.length - 2);
             const minutesPart = digits.slice(-2);
-            const hours = Math.max(0, Math.min(23, Number(hoursPart))).toString().padStart(2, '0');
-            const minutes = Math.max(0, Math.min(59, Number(minutesPart))).toString().padStart(2, '0');
+            const hours = Math.max(0, Math.min(23, Number(hoursPart)))
+                .toString()
+                .padStart(2, '0');
+            const minutes = Math.max(0, Math.min(59, Number(minutesPart)))
+                .toString()
+                .padStart(2, '0');
             return `${hours}:${minutes}`;
         }
         if (digits.length === 2) {
-            const hours = Math.max(0, Math.min(23, Number(digits))).toString().padStart(2, '0');
+            const hours = Math.max(0, Math.min(23, Number(digits)))
+                .toString()
+                .padStart(2, '0');
             return `${hours}:00`;
         }
         if (digits.length === 1) {
@@ -65,8 +71,12 @@ function normalizeTimeInput(value: string): string {
     }
 
     const [hoursRaw = '00', minutesRaw = '00'] = sanitized.split(':');
-    const hours = Math.max(0, Math.min(23, Number(hoursRaw))).toString().padStart(2, '0');
-    const minutes = Math.max(0, Math.min(59, Number(minutesRaw))).toString().padStart(2, '0');
+    const hours = Math.max(0, Math.min(23, Number(hoursRaw)))
+        .toString()
+        .padStart(2, '0');
+    const minutes = Math.max(0, Math.min(59, Number(minutesRaw)))
+        .toString()
+        .padStart(2, '0');
     return `${hours}:${minutes}`;
 }
 
@@ -128,12 +138,7 @@ function getISOWeekNumber(date: Date): number {
     tempDate.setHours(0, 0, 0, 0);
     tempDate.setDate(tempDate.getDate() + 3 - ((tempDate.getDay() + 6) % 7));
     const week1 = new Date(tempDate.getFullYear(), 0, 4);
-    return (
-        1 +
-        Math.round(
-            ((tempDate.getTime() - week1.getTime()) / 86400000 - 3 + ((week1.getDay() + 6) % 7)) / 7
-        )
-    );
+    return 1 + Math.round(((tempDate.getTime() - week1.getTime()) / 86400000 - 3 + ((week1.getDay() + 6) % 7)) / 7);
 }
 
 export default function FoodDiaryPage() {
@@ -368,151 +373,149 @@ export default function FoodDiaryPage() {
 
     if (isLoading) {
         return (
-            <div className="min-h-screen bg-slate-800 flex items-center justify-center">
-                <div className="text-white text-xl">Loading food diary...</div>
+            <div className='min-h-screen bg-slate-800 flex items-center justify-center'>
+                <div className='text-white text-xl'>Loading food diary...</div>
             </div>
         );
     }
 
     if (!user) {
         return (
-            <div className="min-h-screen bg-slate-800 flex items-center justify-center">
-                <div className="text-white text-lg">
-                    Please return to the home page to sign in.
-                </div>
+            <div className='min-h-screen bg-slate-800 flex items-center justify-center'>
+                <div className='text-white text-lg'>Please return to the home page to sign in.</div>
             </div>
         );
     }
 
     return (
-        <div className="min-h-screen bg-slate-800">
-            <div className="container mx-auto px-4 py-4 sm:py-8 max-w-4xl">
-                <div className="flex items-center justify-between mb-6">
+        <div className='min-h-screen bg-slate-800'>
+            <div className='container mx-auto px-4 py-4 sm:py-8 max-w-4xl'>
+                <div className='flex items-center justify-between mb-6'>
                     <div>
-                        <h1 className="text-2xl sm:text-4xl font-bold text-white mb-1">Food Diary</h1>
-                        <p className="text-white/80 text-sm sm:text-base">
+                        <h1 className='text-2xl sm:text-4xl font-bold text-white mb-1'>Food Diary</h1>
+                        <p className='text-white/80 text-sm sm:text-base'>
                             Log meals, track macros, and visualize your weekly calorie trends.
                         </p>
                     </div>
                     <Link
-                        href="/"
-                        className="text-sm sm:text-base text-slate-300 hover:text-white border border-slate-600 px-3 py-2 rounded-lg transition-colors"
+                        href='/'
+                        className='text-sm sm:text-base text-slate-300 hover:text-white border border-slate-600 px-3 py-2 rounded-lg transition-colors'
                     >
                         ← Back to Activity Tracker
                     </Link>
                 </div>
 
-                <div className="bg-slate-700 rounded-lg p-4 sm:p-6 mb-6">
-                    <h2 className="text-white text-lg font-semibold mb-4">Add Meal</h2>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className='bg-slate-700 rounded-lg p-4 sm:p-6 mb-6'>
+                    <h2 className='text-white text-lg font-semibold mb-4'>Add Meal</h2>
+                    <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
                         <div>
-                            <label className="block text-sm text-white mb-2">Date</label>
+                            <label className='block text-sm text-white mb-2'>Date</label>
                             <input
-                                type="date"
+                                type='date'
                                 value={formatDateInput(selectedDate)}
                                 onChange={event => {
                                     if (!event.target.value) return;
                                     setSelectedDate(parseDateInput(event.target.value));
                                 }}
-                                className="w-full h-12 px-3 py-2 border border-slate-600 rounded-lg bg-slate-600 text-white"
+                                className='w-full h-12 px-3 py-2 border border-slate-600 rounded-lg bg-slate-600 text-white'
                             />
                         </div>
                         <div>
-                            <label className="block text-sm text-white mb-2">Time</label>
+                            <label className='block text-sm text-white mb-2'>Time</label>
                             <input
-                                type="text"
-                                inputMode="numeric"
+                                type='text'
+                                inputMode='numeric'
                                 value={mealTime}
                                 onChange={event => setMealTime(normalizeTimeInput(event.target.value))}
-                                placeholder="HH:MM"
-                                className="w-full h-12 px-3 py-2 border border-slate-600 rounded-lg bg-slate-600 text-white"
+                                placeholder='HH:MM'
+                                className='w-full h-12 px-3 py-2 border border-slate-600 rounded-lg bg-slate-600 text-white'
                             />
                         </div>
-                        <div className="md:col-span-2">
-                            <label className="block text-sm text-white mb-2">Meal name</label>
+                        <div className='md:col-span-2'>
+                            <label className='block text-sm text-white mb-2'>Meal name</label>
                             <input
-                                type="text"
+                                type='text'
                                 value={mealName}
                                 onChange={event => setMealName(event.target.value)}
-                                placeholder="Breakfast smoothie, Lunch salad..."
-                                className="w-full h-12 px-3 py-2 border border-slate-600 rounded-lg bg-slate-600 text-white placeholder-slate-400"
+                                placeholder='Breakfast smoothie, Lunch salad...'
+                                className='w-full h-12 px-3 py-2 border border-slate-600 rounded-lg bg-slate-600 text-white placeholder-slate-400'
                             />
                         </div>
                         <div>
-                            <label className="block text-sm text-white mb-2">Calories</label>
+                            <label className='block text-sm text-white mb-2'>Calories</label>
                             <input
-                                type="number"
-                                min="0"
+                                type='number'
+                                min='0'
                                 value={calories}
                                 onChange={event => setCalories(event.target.value)}
-                                className="w-full h-12 px-3 py-2 border border-slate-600 rounded-lg bg-slate-600 text-white"
+                                className='w-full h-12 px-3 py-2 border border-slate-600 rounded-lg bg-slate-600 text-white'
                             />
                         </div>
                         <div>
-                            <label className="block text-sm text-white mb-2">Protein (g)</label>
+                            <label className='block text-sm text-white mb-2'>Protein (g)</label>
                             <input
-                                type="number"
-                                min="0"
+                                type='number'
+                                min='0'
                                 value={protein}
                                 onChange={event => setProtein(event.target.value)}
-                                className="w-full h-12 px-3 py-2 border border-slate-600 rounded-lg bg-slate-600 text-white"
+                                className='w-full h-12 px-3 py-2 border border-slate-600 rounded-lg bg-slate-600 text-white'
                             />
                         </div>
                         <div>
-                            <label className="block text-sm text-white mb-2">Carbs (g)</label>
+                            <label className='block text-sm text-white mb-2'>Carbs (g)</label>
                             <input
-                                type="number"
-                                min="0"
+                                type='number'
+                                min='0'
                                 value={carbs}
                                 onChange={event => setCarbs(event.target.value)}
-                                className="w-full h-12 px-3 py-2 border border-slate-600 rounded-lg bg-slate-600 text-white"
+                                className='w-full h-12 px-3 py-2 border border-slate-600 rounded-lg bg-slate-600 text-white'
                             />
                         </div>
                         <div>
-                            <label className="block text-sm text-white mb-2">Fats (g)</label>
+                            <label className='block text-sm text-white mb-2'>Fats (g)</label>
                             <input
-                                type="number"
-                                min="0"
+                                type='number'
+                                min='0'
                                 value={fats}
                                 onChange={event => setFats(event.target.value)}
-                                className="w-full h-12 px-3 py-2 border border-slate-600 rounded-lg bg-slate-600 text-white"
+                                className='w-full h-12 px-3 py-2 border border-slate-600 rounded-lg bg-slate-600 text-white'
                             />
                         </div>
-                        <div className="md:col-span-2">
-                            <label className="block text-sm text-white mb-2">Notes (optional)</label>
+                        <div className='md:col-span-2'>
+                            <label className='block text-sm text-white mb-2'>Notes (optional)</label>
                             <textarea
                                 value={notes}
                                 onChange={event => setNotes(event.target.value)}
                                 rows={3}
-                                className="w-full px-3 py-2 border border-slate-600 rounded-lg bg-slate-600 text-white"
+                                className='w-full px-3 py-2 border border-slate-600 rounded-lg bg-slate-600 text-white'
                             />
                         </div>
                     </div>
-                    <div className="mt-4 flex justify-end">
+                    <div className='mt-4 flex justify-end'>
                         <button
                             onClick={handleAddMeal}
                             disabled={isSaving || !mealName.trim() || !calories}
-                            className="px-4 py-2 bg-blue-500/80 text-white rounded-lg hover:bg-blue-500 transition-colors disabled:bg-slate-600 disabled:cursor-not-allowed"
+                            className='px-4 py-2 bg-blue-500/80 text-white rounded-lg hover:bg-blue-500 transition-colors disabled:bg-slate-600 disabled:cursor-not-allowed'
                         >
                             {isSaving ? 'Saving...' : 'Add Meal'}
                         </button>
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-6">
-                    <div className="bg-slate-700 rounded-lg p-4 text-center">
-                        <h3 className="text-sm sm:text-base font-semibold text-white mb-1">Calories today</h3>
-                        <p className="text-2xl sm:text-3xl font-bold text-orange-400">
+                <div className='grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-6'>
+                    <div className='bg-slate-700 rounded-lg p-4 text-center'>
+                        <h3 className='text-sm sm:text-base font-semibold text-white mb-1'>Calories today</h3>
+                        <p className='text-2xl sm:text-3xl font-bold text-orange-400'>
                             {totalsForSelectedDay?.total_calories ?? 0}
                         </p>
                     </div>
-                    <div className="bg-slate-700 rounded-lg p-4 text-center">
-                        <h3 className="text-sm sm:text-base font-semibold text-white mb-1">Current week calories</h3>
-                        <p className="text-2xl sm:text-3xl font-bold text-blue-400">{weeklyCalories}</p>
+                    <div className='bg-slate-700 rounded-lg p-4 text-center'>
+                        <h3 className='text-sm sm:text-base font-semibold text-white mb-1'>Current week calories</h3>
+                        <p className='text-2xl sm:text-3xl font-bold text-blue-400'>{weeklyCalories}</p>
                     </div>
-                    <div className="bg-slate-700 rounded-lg p-4 text-center">
-                        <h3 className="text-sm sm:text-base font-semibold text-white mb-1">Protein / Carbs / Fats</h3>
-                        <p className="text-lg sm:text-xl font-semibold text-green-300">
+                    <div className='bg-slate-700 rounded-lg p-4 text-center'>
+                        <h3 className='text-sm sm:text-base font-semibold text-white mb-1'>Protein / Carbs / Fats</h3>
+                        <p className='text-lg sm:text-xl font-semibold text-green-300'>
                             {totalsForSelectedDay
                                 ? `${totalsForSelectedDay.total_protein}g / ${totalsForSelectedDay.total_carbs}g / ${totalsForSelectedDay.total_fats}g`
                                 : '0g / 0g / 0g'}
@@ -520,21 +523,21 @@ export default function FoodDiaryPage() {
                     </div>
                 </div>
 
-                <div className="bg-slate-700 rounded-lg p-4 sm:p-6 mb-6">
-                    <h2 className="text-white text-lg font-semibold mb-4">Meals this week</h2>
-                    <div className="overflow-x-auto">
-                        <table className="min-w-full text-left">
+                <div className='bg-slate-700 rounded-lg p-4 sm:p-6 mb-6'>
+                    <h2 className='text-white text-lg font-semibold mb-4'>Meals this week</h2>
+                    <div className='overflow-x-auto'>
+                        <table className='min-w-full text-left'>
                             <thead>
-                                <tr className="text-slate-300 text-sm uppercase tracking-wide">
-                                    <th className="px-3 py-2">Date</th>
-                                    <th className="px-3 py-2">Time</th>
-                                    <th className="px-3 py-2">Meal</th>
-                                    <th className="px-3 py-2 text-right">Calories</th>
-                                    <th className="px-3 py-2 text-right">Protein</th>
-                                    <th className="px-3 py-2 text-right">Carbs</th>
-                                    <th className="px-3 py-2 text-right">Fats</th>
-                                    <th className="px-3 py-2">Notes</th>
-                                    <th className="px-3 py-2 text-right">Actions</th>
+                                <tr className='text-slate-300 text-sm uppercase tracking-wide'>
+                                    <th className='px-3 py-2'>Date</th>
+                                    <th className='px-3 py-2'>Time</th>
+                                    <th className='px-3 py-2'>Meal</th>
+                                    <th className='px-3 py-2 text-right'>Calories</th>
+                                    <th className='px-3 py-2 text-right'>Protein</th>
+                                    <th className='px-3 py-2 text-right'>Carbs</th>
+                                    <th className='px-3 py-2 text-right'>Fats</th>
+                                    <th className='px-3 py-2'>Notes</th>
+                                    <th className='px-3 py-2 text-right'>Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -545,33 +548,33 @@ export default function FoodDiaryPage() {
 
                                     return (
                                         <Fragment key={key}>
-                                            <tr className="bg-slate-800/60">
-                                                <td className="px-3 py-2 text-white font-medium" colSpan={3}>
+                                            <tr className='bg-slate-800/60'>
+                                                <td className='px-3 py-2 text-white font-medium' colSpan={3}>
                                                     {date.toLocaleDateString(undefined, {
                                                         weekday: 'short',
                                                         month: 'short',
                                                         day: 'numeric',
                                                     })}
                                                 </td>
-                                                <td className="px-3 py-2 text-right text-white font-semibold">
+                                                <td className='px-3 py-2 text-right text-white font-semibold'>
                                                     {totals?.total_calories ?? 0}
                                                 </td>
-                                                <td className="px-3 py-2 text-right text-white">
+                                                <td className='px-3 py-2 text-right text-white'>
                                                     {totals?.total_protein ?? 0}g
                                                 </td>
-                                                <td className="px-3 py-2 text-right text-white">
+                                                <td className='px-3 py-2 text-right text-white'>
                                                     {totals?.total_carbs ?? 0}g
                                                 </td>
-                                                <td className="px-3 py-2 text-right text-white">
+                                                <td className='px-3 py-2 text-right text-white'>
                                                     {totals?.total_fats ?? 0}g
                                                 </td>
-                                                <td className="px-3 py-2 text-slate-300" colSpan={2}>
+                                                <td className='px-3 py-2 text-slate-300' colSpan={2}>
                                                     Daily totals
                                                 </td>
                                             </tr>
                                             {rows.length === 0 ? (
                                                 <tr>
-                                                    <td className="px-3 py-3 text-slate-400" colSpan={9}>
+                                                    <td className='px-3 py-3 text-slate-400' colSpan={9}>
                                                         No meals logged.
                                                     </td>
                                                 </tr>
@@ -579,36 +582,36 @@ export default function FoodDiaryPage() {
                                                 rows.map(meal => {
                                                     const mealDate = new Date(meal.meal_time);
                                                     return (
-                                                        <tr key={meal.id} className="border-t border-slate-600/50">
-                                                            <td className="px-3 py-2 text-slate-200">
+                                                        <tr key={meal.id} className='border-t border-slate-600/50'>
+                                                            <td className='px-3 py-2 text-slate-200'>
                                                                 {mealDate.toLocaleDateString()}
                                                             </td>
-                                                            <td className="px-3 py-2 text-slate-200">
+                                                            <td className='px-3 py-2 text-slate-200'>
                                                                 {formatMealTime(meal.meal_time)}
                                                             </td>
-                                                            <td className="px-3 py-2 text-white font-medium">
+                                                            <td className='px-3 py-2 text-white font-medium'>
                                                                 {meal.meal_name}
                                                             </td>
-                                                            <td className="px-3 py-2 text-right text-slate-200">
+                                                            <td className='px-3 py-2 text-right text-slate-200'>
                                                                 {meal.calories}
                                                             </td>
-                                                            <td className="px-3 py-2 text-right text-slate-200">
+                                                            <td className='px-3 py-2 text-right text-slate-200'>
                                                                 {meal.protein}g
                                                             </td>
-                                                            <td className="px-3 py-2 text-right text-slate-200">
+                                                            <td className='px-3 py-2 text-right text-slate-200'>
                                                                 {meal.carbs}g
                                                             </td>
-                                                            <td className="px-3 py-2 text-right text-slate-200">
+                                                            <td className='px-3 py-2 text-right text-slate-200'>
                                                                 {meal.fats}g
                                                             </td>
-                                                            <td className="px-3 py-2 text-slate-300 max-w-[200px] truncate">
+                                                            <td className='px-3 py-2 text-slate-300 max-w-[200px] truncate'>
                                                                 {meal.notes ?? '—'}
                                                             </td>
-                                                            <td className="px-3 py-2 text-right">
+                                                            <td className='px-3 py-2 text-right'>
                                                                 <button
                                                                     onClick={() => handleDeleteMeal(meal.id)}
                                                                     disabled={isDeleting === meal.id}
-                                                                    className="text-red-400 hover:text-red-200 transition-colors disabled:text-red-900"
+                                                                    className='text-red-400 hover:text-red-200 transition-colors disabled:text-red-900'
                                                                 >
                                                                     {isDeleting === meal.id ? 'Removing...' : 'Remove'}
                                                                 </button>
@@ -626,11 +629,14 @@ export default function FoodDiaryPage() {
                 </div>
 
                 {weeklyTrend.length > 0 && (
-                    <div className="bg-slate-700 rounded-lg p-4 sm:p-6 mb-6">
-                        <h3 className="text-lg font-semibold text-white mb-4 flex items-center">🔥 Calories Trend</h3>
-                        <div className="bg-slate-800 rounded-lg pb-2">
-                            <div className="relative h-32 sm:h-40">
-                                <svg className="absolute inset-0 w-full h-full" style={{ zIndex: 10, overflow: 'visible' }}>
+                    <div className='bg-slate-700 rounded-lg p-4 sm:p-6 mb-6'>
+                        <h3 className='text-lg font-semibold text-white mb-4 flex items-center'>🔥 Calories Trend</h3>
+                        <div className='bg-slate-800 rounded-lg pb-2'>
+                            <div className='relative h-32 sm:h-40'>
+                                <svg
+                                    className='absolute inset-0 w-full h-full'
+                                    style={{ zIndex: 10, overflow: 'visible' }}
+                                >
                                     {weeklyTrend.map((point, index) => {
                                         if (index === 0) return null;
                                         const prevPoint = weeklyTrend[index - 1];
@@ -657,9 +663,9 @@ export default function FoodDiaryPage() {
                                                 y1={`${prevY}%`}
                                                 x2={`${currentX}%`}
                                                 y2={`${currentY}%`}
-                                                stroke="#f97316"
-                                                strokeWidth="3"
-                                                strokeLinecap="round"
+                                                stroke='#f97316'
+                                                strokeWidth='3'
+                                                strokeLinecap='round'
                                             />
                                         );
                                     })}
@@ -680,23 +686,23 @@ export default function FoodDiaryPage() {
                                                 key={`cal-point-${index}`}
                                                 cx={`${x}%`}
                                                 cy={`${y}%`}
-                                                r="4"
-                                                fill="#f97316"
-                                                stroke="#1e293b"
-                                                strokeWidth="2"
+                                                r='4'
+                                                fill='#f97316'
+                                                stroke='#1e293b'
+                                                strokeWidth='2'
                                             />
                                         );
                                     })}
                                 </svg>
                             </div>
-                            <div className="flex justify-between mt-3">
+                            <div className='flex justify-between mt-3'>
                                 {weeklyTrend.map(point => {
                                     const weekDate = new Date(point.week);
                                     const label = `Week ${getISOWeekNumber(weekDate)}`;
                                     return (
-                                        <div key={point.week} className="flex flex-col items-center flex-1 text-center">
-                                            <div className="text-xs font-medium text-white mb-1">{point.calories}</div>
-                                            <div className="text-xs text-slate-300">{label}</div>
+                                        <div key={point.week} className='flex flex-col items-center flex-1 text-center'>
+                                            <div className='text-xs font-medium text-white mb-1'>{point.calories}</div>
+                                            <div className='text-xs text-slate-300'>{label}</div>
                                         </div>
                                     );
                                 })}
@@ -708,4 +714,3 @@ export default function FoodDiaryPage() {
         </div>
     );
 }
-
