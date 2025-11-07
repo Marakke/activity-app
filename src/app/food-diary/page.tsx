@@ -1,6 +1,7 @@
 'use client';
 
 import { Fragment, useEffect, useMemo, useState } from 'react';
+import { GoogleGenAI } from '@google/genai';
 import type { User } from '@supabase/supabase-js';
 import Link from 'next/link';
 
@@ -156,6 +157,11 @@ export default function FoodDiaryPage() {
     const [carbs, setCarbs] = useState('');
     const [fats, setFats] = useState('');
     const [notes, setNotes] = useState('');
+    const [mealDescription, setMealDescription] = useState('');
+    const [isAnalyzingMeal, setIsAnalyzingMeal] = useState(false);
+    const [aiEstimateError, setAiEstimateError] = useState<string | null>(null);
+
+    const ai = new GoogleGenAI({ apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY ?? '' });
 
     useEffect(() => {
         supabase.auth.getSession().then(({ data: { session } }) => {
@@ -301,6 +307,64 @@ export default function FoodDiaryPage() {
         setFats('');
         setNotes('');
         setMealTime(normalizeTimeInput(getLocalTimeHHMM(new Date())));
+        setMealDescription('');
+        setAiEstimateError(null);
+    };
+
+    const handleAnalyzeMeal = async () => {
+        if (!mealDescription.trim()) return;
+
+        if (!process.env.NEXT_PUBLIC_GEMINI_API_KEY) {
+            setAiEstimateError(
+                'Meal analysis requires a Gemini API key. Add NEXT_PUBLIC_GEMINI_API_KEY to enable this feature.'
+            );
+            return;
+        }
+
+        setIsAnalyzingMeal(true);
+        setAiEstimateError(null);
+
+        try {
+            const prompt = `You estimate nutrition facts. Return JSON like {"calories":120, "protein":8, "carbs":15, "fats":4} with whole numbers.
+If data is missing, best-guess typical values. Description: ${mealDescription.trim()}`;
+
+            const response = await ai.models.generateContent({
+                model: 'gemini-2.0-flash-001',
+                contents: prompt,
+            });
+
+            let rawText = response.text ?? '';
+
+            if (!rawText && response.candidates?.length) {
+                const firstCandidate = response.candidates[0];
+                rawText =
+                    firstCandidate.content?.parts
+                        ?.map(part => ('text' in part && typeof part.text === 'string' ? part.text : ''))
+                        .join('') ?? '';
+            }
+
+            const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+            if (!jsonMatch) {
+                throw new Error('Unable to parse AI response');
+            }
+
+            const parsed = JSON.parse(jsonMatch[0]) as Partial<
+                Record<'calories' | 'protein' | 'carbs' | 'fats', unknown>
+            >;
+
+            const sanitize = (value: unknown) =>
+                typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.round(value) : 0;
+
+            setCalories(String(sanitize(parsed.calories)));
+            setProtein(String(sanitize(parsed.protein)));
+            setCarbs(String(sanitize(parsed.carbs)));
+            setFats(String(sanitize(parsed.fats)));
+        } catch (error) {
+            console.error('Failed to analyze meal with AI:', error);
+            setAiEstimateError('Unable to analyze the meal description. Please adjust the details and try again.');
+        } finally {
+            setIsAnalyzingMeal(false);
+        }
     };
 
     const handleAddMeal = async () => {
@@ -440,6 +504,34 @@ export default function FoodDiaryPage() {
                                 placeholder='Breakfast smoothie, Lunch salad...'
                                 className='w-full h-12 px-3 py-2 border border-slate-600 rounded-lg bg-slate-600 text-white placeholder-slate-400'
                             />
+                        </div>
+                        <div className='md:col-span-2'>
+                            <label className='block text-sm text-white mb-2'>Meal description for AI (optional)</label>
+                            <textarea
+                                value={mealDescription}
+                                onChange={event => setMealDescription(event.target.value)}
+                                rows={3}
+                                placeholder='e.g., Grilled salmon with brown rice and steamed broccoli, medium portion'
+                                className='w-full px-3 py-2 border border-slate-600 rounded-lg bg-slate-600 text-white placeholder-slate-400'
+                            />
+                        </div>
+                        <div className='md:col-span-2 flex flex-col gap-2'>
+                            <button
+                                type='button'
+                                onClick={handleAnalyzeMeal}
+                                disabled={isAnalyzingMeal || !mealDescription.trim()}
+                                className='inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-purple-500/80 hover:bg-purple-500 text-white transition-colors disabled:bg-slate-600 disabled:text-slate-300 disabled:cursor-not-allowed'
+                            >
+                                {isAnalyzingMeal ? 'Analyzing meal…' : 'Analyze with AI'}
+                            </button>
+                            {aiEstimateError ? (
+                                <p className='text-sm text-red-300'>{aiEstimateError}</p>
+                            ) : (
+                                <p className='text-xs text-slate-300'>
+                                    AI will suggest calories and macros based on the description. You can edit the
+                                    values before saving.
+                                </p>
+                            )}
                         </div>
                         <div>
                             <label className='block text-sm text-white mb-2'>Calories</label>
