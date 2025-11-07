@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useState, useEffect, useRef } from 'react';
 import { GoogleGenAI } from '@google/genai';
 import { supabase } from '@/lib/supabase';
@@ -12,6 +13,13 @@ interface ActivityRow {
     emoji: string;
     completedDays: string[];
 }
+
+const formatDateKey = (date: Date): string => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
 
 export default function Home() {
     const [user, setUser] = useState<User | null>(null);
@@ -55,6 +63,7 @@ export default function Home() {
     useEffect(() => {
         const today = new Date();
         const startOfWeek = new Date(today);
+        startOfWeek.setHours(0, 0, 0, 0);
         startOfWeek.setDate(today.getDate() - today.getDay() + 1); // Start from Monday
 
         const weekDates = [];
@@ -153,9 +162,12 @@ export default function Home() {
             }
 
             // Migrate AI analyses
-            const savedAnalysis = localStorage.getItem('ai_analysis_' + currentWeek[0]?.toISOString().split('T')[0]);
-            if (savedAnalysis) {
-                const currentWeekKey = currentWeek[0]?.toISOString().split('T')[0];
+            const firstWeekDay = currentWeek[0];
+            const currentWeekKey = firstWeekDay ? formatDateKey(firstWeekDay) : undefined;
+            const savedAnalysis = currentWeekKey
+                ? localStorage.getItem('ai_analysis_' + currentWeekKey)
+                : null;
+            if (currentWeekKey && savedAnalysis) {
                 const { error } = await supabase.from('weekly_analyses').upsert(
                     {
                         user_id: user.id,
@@ -221,22 +233,14 @@ export default function Home() {
     }, [activityRows, user, isLoadingFromDB]);
 
     const isActivityCompleted = (rowId: string, date: Date): boolean => {
-        const dateStr = formatDateLocal(date);
+        const dateStr = formatDateKey(date);
         const row = activityRows.find(row => row.id === rowId);
         if (!row || !row.completedDays) return false;
         return row.completedDays.includes(dateStr);
     };
 
-    // Helper function to format date as YYYY-MM-DD in local timezone
-    const formatDateLocal = (date: Date): string => {
-        const year = date.getFullYear();
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        return `${year}-${month}-${day}`;
-    };
-
     const toggleActivityCompletion = (rowId: string, date: Date) => {
-        const dateStr = formatDateLocal(date);
+        const dateStr = formatDateKey(date);
         setActivityRows(prev => {
             return prev.map(row => {
                 if (row.id === rowId) {
@@ -283,7 +287,7 @@ export default function Home() {
         const maxDaysToCheck = 365; // Prevent infinite loops
 
         for (let i = 0; i < maxDaysToCheck; i++) {
-            const dateStr = formatDateLocal(currentDate);
+            const dateStr = formatDateKey(currentDate);
 
             if (uniqueDates.has(dateStr)) {
                 streak++;
@@ -311,14 +315,14 @@ export default function Home() {
         const uniqueDates = new Set(allCompletedDays);
 
         // Count only days in the current week
-        const weekDates = currentWeek.map(date => date.toISOString().split('T')[0]);
+        const weekDates = currentWeek.map(date => formatDateKey(date));
         const activeDaysInWeek = weekDates.filter(dateStr => uniqueDates.has(dateStr));
 
         return activeDaysInWeek.length;
     };
 
     const getTotalActivitiesForDay = (date: Date): number => {
-        const dateStr = formatDateLocal(date);
+        const dateStr = formatDateKey(date);
         return activityRows.reduce((total, row) => {
             return total + (row.completedDays?.includes(dateStr) ? 1 : 0);
         }, 0);
@@ -351,7 +355,7 @@ export default function Home() {
         allCompletedDays.forEach(dateStr => {
             const date = new Date(dateStr);
             const weekStart = getWeekStartDate(date);
-            const weekKey = weekStart.toISOString().split('T')[0];
+            const weekKey = formatDateKey(weekStart);
 
             if (!weekGroups[weekKey]) {
                 weekGroups[weekKey] = [];
@@ -491,7 +495,7 @@ export default function Home() {
 
             // Cache the analysis in Supabase
             if (user) {
-                const currentWeekKey = currentWeek[0]?.toISOString().split('T')[0] || '';
+                const currentWeekKey = currentWeek[0] ? formatDateKey(currentWeek[0]) : '';
                 if (analysis) {
                     await supabase.from('weekly_analyses').upsert(
                         {
@@ -530,7 +534,7 @@ export default function Home() {
     // Load cached analysis from Supabase on component mount
     useEffect(() => {
         if (user) {
-            const currentWeekKey = currentWeek[0]?.toISOString().split('T')[0] || '';
+            const currentWeekKey = currentWeek[0] ? formatDateKey(currentWeek[0]) : '';
             const loadAnalysis = async () => {
                 const { data, error } = await supabase
                     .from('weekly_analyses')
@@ -602,7 +606,13 @@ export default function Home() {
                 <div className='text-center mb-6'>
                     <h1 className='text-2xl sm:text-4xl font-bold text-white mb-2'>Activity Tracker</h1>
                     <p className='text-white text-sm sm:text-lg'>Track your daily activities and stay motivated!</p>
-                    <div className='mt-2 flex justify-center'>
+                    <div className='mt-2 flex justify-center gap-4'>
+                        <Link
+                            href='/food-diary'
+                            className='text-sm text-slate-100 bg-blue-600/80 hover:bg-blue-500 px-4 py-2 rounded-lg transition-colors'
+                        >
+                            Food Diary
+                        </Link>
                         <button
                             onClick={handleLogout}
                             className='text-slate-400 hover:text-white text-sm transition-colors'

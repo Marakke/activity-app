@@ -19,6 +19,10 @@ Activity Tracker is a personal productivity tool that helps users monitor their 
 ### 🤖 **AI-Powered Insights**
 - Weekly AI analysis powered by Google Gemini
 
+### 🍽️ **Food Diary**
+- Log meals with calories and macros (protein, carbs, fats)
+- Daily summaries and weekly calories trend chart
+
 ### 🔐 **Secure Authentication & Data Storage**
 - Email/password authentication via Supabase Auth
 - End-to-end encrypted data transmission
