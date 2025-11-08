@@ -820,7 +820,7 @@ If data is missing, best-guess typical values. Description: ${mealDescription.tr
                         <button
                             onClick={handleAddMeal}
                             disabled={isSaving || !mealName.trim() || !calories}
-                            className='px-4 py-2 bg-blue-500/80 text-white rounded-lg hover:bg-blue-500 transition-colors disabled:bg-slate-600 disabled:cursor-not-allowed'
+                            className='px-4 py-2 bg-blue-500/80 text-white rounded-lg hover:bg-blue-500 transition-colors disabled:bg-slate-600 disabled:cursor-not-allowed cursor-pointer'
                         >
                             {isSaving ? 'Saving...' : 'Add Meal'}
                         </button>
@@ -955,7 +955,9 @@ If data is missing, best-guess typical values. Description: ${mealDescription.tr
 
                 {dailyTrend.length > 0 && (
                     <div className='bg-slate-700 rounded-lg p-4 sm:p-6 mb-6'>
-                        <h3 className='text-lg font-semibold text-white mb-4 flex items-center'>🔥 Daily Calories Trend</h3>
+                        <h3 className='text-lg font-semibold text-white mb-4 flex items-center'>
+                            🔥 Daily Calories Trend
+                        </h3>
                         <div className='bg-slate-800 rounded-lg pb-2'>
                             <div className='relative h-32 sm:h-40'>
                                 <svg

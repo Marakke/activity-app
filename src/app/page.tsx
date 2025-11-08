@@ -620,7 +620,7 @@ export default function Home() {
                         </Link>
                         <button
                             onClick={handleLogout}
-                            className='text-slate-400 hover:text-white text-sm transition-colors'
+                            className='text-slate-400 hover:text-white text-sm transition-colors cursor-pointer'
                         >
                             Logout
                         </button>
