@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { GoogleGenAI } from '@google/genai';
 import type { User } from '@supabase/supabase-js';
 import Link from 'next/link';
@@ -17,8 +17,46 @@ import {
 } from '@/lib/meals';
 
 interface TrendPoint {
-    week: string;
+    date: string;
     calories: number;
+}
+
+type IconProps = React.SVGProps<SVGSVGElement>;
+
+function CalendarIcon(props: IconProps) {
+    return (
+        <svg
+            viewBox='0 0 24 24'
+            fill='none'
+            stroke='currentColor'
+            strokeWidth='1.5'
+            strokeLinecap='round'
+            strokeLinejoin='round'
+            {...props}
+        >
+            <rect x='3.75' y='4.5' width='16.5' height='16.5' rx='2' />
+            <path d='M8 3v3' />
+            <path d='M16 3v3' />
+            <path d='M3.75 9.75h16.5' />
+        </svg>
+    );
+}
+
+function ClockIcon(props: IconProps) {
+    return (
+        <svg
+            viewBox='0 0 24 24'
+            fill='none'
+            stroke='currentColor'
+            strokeWidth='1.5'
+            strokeLinecap='round'
+            strokeLinejoin='round'
+            {...props}
+        >
+            <circle cx='12' cy='12' r='9' />
+            <path d='M12 7.5v4.5l2.5 2.5' />
+        </svg>
+    );
 }
 
 function formatDateKey(date: Date): string {
@@ -126,20 +164,19 @@ function endOfSunday(date: Date): Date {
 
 const formatDateInput = (date: Date): string => formatDateKey(date);
 
+function startOfMonth(date: Date): Date {
+    const next = new Date(date);
+    next.setHours(0, 0, 0, 0);
+    next.setDate(1);
+    return next;
+}
+
 function combineDateAndTime(date: Date, time: string): string {
     const normalized = normalizeTimeInput(time || '12:00');
     const [hours, minutes] = normalized.split(':').map(Number);
     const combined = new Date(date);
     combined.setHours(hours ?? 0, minutes ?? 0, 0, 0);
     return combined.toISOString();
-}
-
-function getISOWeekNumber(date: Date): number {
-    const tempDate = new Date(date.getTime());
-    tempDate.setHours(0, 0, 0, 0);
-    tempDate.setDate(tempDate.getDate() + 3 - ((tempDate.getDay() + 6) % 7));
-    const week1 = new Date(tempDate.getFullYear(), 0, 4);
-    return 1 + Math.round(((tempDate.getTime() - week1.getTime()) / 86400000 - 3 + ((week1.getDay() + 6) % 7)) / 7);
 }
 
 export default function FoodDiaryPage() {
@@ -160,6 +197,12 @@ export default function FoodDiaryPage() {
     const [mealDescription, setMealDescription] = useState('');
     const [isAnalyzingMeal, setIsAnalyzingMeal] = useState(false);
     const [aiEstimateError, setAiEstimateError] = useState<string | null>(null);
+    const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
+    const [isTimePickerOpen, setIsTimePickerOpen] = useState(false);
+    const [datePickerMonth, setDatePickerMonth] = useState(() => startOfMonth(new Date()));
+
+    const datePickerRef = useRef<HTMLDivElement | null>(null);
+    const timePickerRef = useRef<HTMLDivElement | null>(null);
 
     const ai = new GoogleGenAI({ apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY ?? '' });
 
@@ -203,6 +246,37 @@ export default function FoodDiaryPage() {
 
         load();
     }, [user, selectedDate]);
+
+    useEffect(() => {
+        setDatePickerMonth(startOfMonth(selectedDate));
+    }, [selectedDate]);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            const target = event.target as Node;
+            if (isDatePickerOpen && datePickerRef.current && !datePickerRef.current.contains(target)) {
+                setIsDatePickerOpen(false);
+            }
+            if (isTimePickerOpen && timePickerRef.current && !timePickerRef.current.contains(target)) {
+                setIsTimePickerOpen(false);
+            }
+        };
+
+        const handleEscape = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                setIsDatePickerOpen(false);
+                setIsTimePickerOpen(false);
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        document.addEventListener('keydown', handleEscape);
+
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+            document.removeEventListener('keydown', handleEscape);
+        };
+    }, [isDatePickerOpen, isTimePickerOpen]);
 
     const mealsByDay = useMemo(() => {
         const grouped: Record<string, Meal[]> = {};
@@ -280,24 +354,50 @@ export default function FoodDiaryPage() {
         }, 0);
     }, [currentWeek, totalsByDay]);
 
-    const weeklyTrend: TrendPoint[] = useMemo(() => {
-        const grouped = new Map<string, number>();
+    const dailyTrend: TrendPoint[] = useMemo(() => {
+        const trend = dailyTotals.map(total => ({
+            date: formatDateKey(new Date(total.meal_day)),
+            calories: total.total_calories ?? 0,
+        }));
 
-        dailyTotals.forEach(total => {
-            const day = new Date(total.meal_day);
-            const weekStart = formatDateKey(startOfMonday(day));
-            const prev = grouped.get(weekStart) ?? 0;
-            grouped.set(weekStart, prev + (total.total_calories ?? 0));
+        Object.entries(computedTotalsByDay).forEach(([day, totals]) => {
+            const existingIndex = trend.findIndex(point => point.date === day);
+            if (existingIndex >= 0) {
+                trend[existingIndex] = { date: day, calories: totals.total_calories ?? 0 };
+            } else {
+                trend.push({ date: day, calories: totals.total_calories ?? 0 });
+            }
         });
 
-        return Array.from(grouped.entries())
-            .map(([week, calories]) => ({ week, calories }))
-            .sort((a, b) => a.week.localeCompare(b.week));
-    }, [dailyTotals]);
+        return trend.sort((a, b) => a.date.localeCompare(b.date));
+    }, [dailyTotals, computedTotalsByDay]);
 
     const maxTrendCalories = useMemo(() => {
-        return weeklyTrend.length > 0 ? Math.max(...weeklyTrend.map(point => point.calories)) : 0;
-    }, [weeklyTrend]);
+        return dailyTrend.length > 0 ? Math.max(...dailyTrend.map(point => point.calories)) : 0;
+    }, [dailyTrend]);
+
+    const calendarDays = useMemo(() => {
+        const start = startOfMonday(datePickerMonth);
+        const days: Date[] = [];
+        for (let index = 0; index < 42; index += 1) {
+            const day = new Date(start);
+            day.setDate(start.getDate() + index);
+            days.push(day);
+        }
+        return days;
+    }, [datePickerMonth]);
+
+    const timeOptions = useMemo(() => {
+        const options: string[] = [];
+        for (let hour = 0; hour < 24; hour += 1) {
+            for (let minute = 0; minute < 60; minute += 15) {
+                const formattedHour = String(hour).padStart(2, '0');
+                const formattedMinute = String(minute).padStart(2, '0');
+                options.push(`${formattedHour}:${formattedMinute}`);
+            }
+        }
+        return options;
+    }, []);
 
     const resetForm = () => {
         setMealName('');
@@ -458,7 +558,7 @@ If data is missing, best-guess typical values. Description: ${mealDescription.tr
                     <div>
                         <h1 className='text-2xl sm:text-4xl font-bold text-white mb-1'>Food Diary</h1>
                         <p className='text-white/80 text-sm sm:text-base'>
-                            Log meals, track macros, and visualize your weekly calorie trends.
+                            Log meals, track macros, and visualize your daily calorie trends.
                         </p>
                     </div>
                     <Link
@@ -474,26 +574,159 @@ If data is missing, best-guess typical values. Description: ${mealDescription.tr
                     <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
                         <div>
                             <label className='block text-sm text-white mb-2'>Date</label>
-                            <input
-                                type='date'
-                                value={formatDateInput(selectedDate)}
-                                onChange={event => {
-                                    if (!event.target.value) return;
-                                    setSelectedDate(parseDateInput(event.target.value));
-                                }}
-                                className='w-full h-12 px-3 py-2 border border-slate-600 rounded-lg bg-slate-600 text-white'
-                            />
+                            <div className='relative' ref={datePickerRef}>
+                                <input
+                                    type='text'
+                                    value={formatDateInput(selectedDate)}
+                                    onChange={event => {
+                                        if (!event.target.value) return;
+                                        setSelectedDate(parseDateInput(event.target.value));
+                                    }}
+                                    onFocus={() => setIsDatePickerOpen(true)}
+                                    onClick={() => setIsDatePickerOpen(true)}
+                                    autoComplete='off'
+                                    className='w-full h-12 px-3 pr-12 py-2 border border-slate-600 rounded-lg bg-slate-600 text-white cursor-pointer selection:bg-blue-500/40'
+                                />
+                                <button
+                                    type='button'
+                                    aria-label='Select date'
+                                    onClick={() => setIsDatePickerOpen(open => !open)}
+                                    className='absolute inset-y-0 right-2 flex items-center text-slate-200 hover:text-white transition-colors'
+                                >
+                                    <CalendarIcon className='w-5 h-5' />
+                                </button>
+                                {isDatePickerOpen && (
+                                    <div className='absolute right-0 z-30 mt-2 w-72 rounded-lg border border-slate-600 bg-slate-800 p-3 shadow-lg'>
+                                        <div className='mb-2 flex items-center justify-between'>
+                                            <button
+                                                type='button'
+                                                onClick={() =>
+                                                    setDatePickerMonth(current => {
+                                                        const next = new Date(current);
+                                                        next.setMonth(current.getMonth() - 1);
+                                                        return startOfMonth(next);
+                                                    })
+                                                }
+                                                className='rounded-md px-2 py-1 text-slate-200 hover:bg-slate-700'
+                                            >
+                                                ‹
+                                            </button>
+                                            <div className='text-sm font-medium text-white'>
+                                                {datePickerMonth.toLocaleDateString(undefined, {
+                                                    month: 'long',
+                                                    year: 'numeric',
+                                                })}
+                                            </div>
+                                            <button
+                                                type='button'
+                                                onClick={() =>
+                                                    setDatePickerMonth(current => {
+                                                        const next = new Date(current);
+                                                        next.setMonth(current.getMonth() + 1);
+                                                        return startOfMonth(next);
+                                                    })
+                                                }
+                                                className='rounded-md px-2 py-1 text-slate-200 hover:bg-slate-700'
+                                            >
+                                                ›
+                                            </button>
+                                        </div>
+                                        <div className='grid grid-cols-7 gap-1 text-center text-xs text-slate-300'>
+                                            {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(weekday => (
+                                                <div key={weekday} className='py-1'>
+                                                    {weekday}
+                                                </div>
+                                            ))}
+                                        </div>
+                                        <div className='mt-1 grid grid-cols-7 gap-1'>
+                                            {calendarDays.map(day => {
+                                                const dayKey = formatDateKey(day);
+                                                const isCurrentMonth = day.getMonth() === datePickerMonth.getMonth();
+                                                const isSelected = dayKey === formatDateKey(selectedDate);
+                                                const isToday = dayKey === formatDateKey(new Date());
+
+                                                let classes =
+                                                    'w-full rounded-md px-0 py-2 text-sm font-medium transition-colors flex items-center justify-center';
+                                                if (isSelected) {
+                                                    classes += ' bg-blue-500 text-white hover:bg-blue-500';
+                                                } else if (isToday) {
+                                                    classes +=
+                                                        ' border border-blue-400 text-white hover:bg-blue-600/40';
+                                                } else {
+                                                    classes += ' text-slate-200 hover:bg-slate-600/80';
+                                                }
+
+                                                if (!isCurrentMonth) {
+                                                    classes += ' text-slate-400/70';
+                                                }
+
+                                                return (
+                                                    <button
+                                                        key={dayKey}
+                                                        type='button'
+                                                        onClick={() => {
+                                                            const next = new Date(day);
+                                                            setSelectedDate(next);
+                                                            setIsDatePickerOpen(false);
+                                                        }}
+                                                        className={classes}
+                                                    >
+                                                        {day.getDate()}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                         <div>
                             <label className='block text-sm text-white mb-2'>Time</label>
-                            <input
-                                type='text'
-                                inputMode='numeric'
-                                value={mealTime}
-                                onChange={event => setMealTime(normalizeTimeInput(event.target.value))}
-                                placeholder='HH:MM'
-                                className='w-full h-12 px-3 py-2 border border-slate-600 rounded-lg bg-slate-600 text-white'
-                            />
+                            <div className='relative' ref={timePickerRef}>
+                                <input
+                                    type='text'
+                                    value={mealTime}
+                                    onFocus={() => setIsTimePickerOpen(true)}
+                                    onClick={() => setIsTimePickerOpen(true)}
+                                    onChange={event => setMealTime(normalizeTimeInput(event.target.value))}
+                                    placeholder='HH:MM'
+                                    autoComplete='off'
+                                    className='w-full h-12 px-3 pr-12 py-2 border border-slate-600 rounded-lg bg-slate-600 text-white selection:bg-blue-500/40'
+                                />
+                                <button
+                                    type='button'
+                                    aria-label='Select time'
+                                    onClick={() => setIsTimePickerOpen(open => !open)}
+                                    className='absolute inset-y-0 right-2 flex items-center text-slate-200 hover:text-white transition-colors'
+                                >
+                                    <ClockIcon className='w-5 h-5' />
+                                </button>
+                                {isTimePickerOpen && (
+                                    <div className='absolute right-0 z-30 mt-2 max-h-64 w-40 overflow-y-auto rounded-lg border border-slate-600 bg-slate-800 p-2 shadow-lg'>
+                                        {timeOptions.map(option => {
+                                            const isSelected = option === mealTime;
+                                            return (
+                                                <button
+                                                    key={option}
+                                                    type='button'
+                                                    onClick={() => {
+                                                        setMealTime(option);
+                                                        setIsTimePickerOpen(false);
+                                                    }}
+                                                    className={`flex w-full items-center justify-between rounded-md px-3 py-2 text-sm transition-colors ${
+                                                        isSelected
+                                                            ? 'bg-blue-500 text-white'
+                                                            : 'text-slate-200 hover:bg-slate-600/80'
+                                                    }`}
+                                                >
+                                                    <span>{option}</span>
+                                                    {isSelected && <span className='text-xs text-white/80'>✓</span>}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
                         </div>
                         <div className='md:col-span-2'>
                             <label className='block text-sm text-white mb-2'>Meal name</label>
@@ -720,19 +953,19 @@ If data is missing, best-guess typical values. Description: ${mealDescription.tr
                     </div>
                 </div>
 
-                {weeklyTrend.length > 0 && (
+                {dailyTrend.length > 0 && (
                     <div className='bg-slate-700 rounded-lg p-4 sm:p-6 mb-6'>
-                        <h3 className='text-lg font-semibold text-white mb-4 flex items-center'>🔥 Calories Trend</h3>
+                        <h3 className='text-lg font-semibold text-white mb-4 flex items-center'>🔥 Daily Calories Trend</h3>
                         <div className='bg-slate-800 rounded-lg pb-2'>
                             <div className='relative h-32 sm:h-40'>
                                 <svg
                                     className='absolute inset-0 w-full h-full'
                                     style={{ zIndex: 10, overflow: 'visible' }}
                                 >
-                                    {weeklyTrend.map((point, index) => {
+                                    {dailyTrend.map((point, index) => {
                                         if (index === 0) return null;
-                                        const prevPoint = weeklyTrend[index - 1];
-                                        const barWidth = 100 / weeklyTrend.length;
+                                        const prevPoint = dailyTrend[index - 1];
+                                        const barWidth = 100 / dailyTrend.length;
                                         const prevX = (index - 1) * barWidth + barWidth / 2;
                                         const currentX = index * barWidth + barWidth / 2;
                                         const topPadding = 10;
@@ -762,8 +995,8 @@ If data is missing, best-guess typical values. Description: ${mealDescription.tr
                                         );
                                     })}
 
-                                    {weeklyTrend.map((point, index) => {
-                                        const barWidth = 100 / weeklyTrend.length;
+                                    {dailyTrend.map((point, index) => {
+                                        const barWidth = 100 / dailyTrend.length;
                                         const x = index * barWidth + barWidth / 2;
                                         const topPadding = 10;
                                         const chartHeight = 85;
@@ -788,11 +1021,14 @@ If data is missing, best-guess typical values. Description: ${mealDescription.tr
                                 </svg>
                             </div>
                             <div className='flex justify-between mt-3'>
-                                {weeklyTrend.map(point => {
-                                    const weekDate = new Date(point.week);
-                                    const label = `Week ${getISOWeekNumber(weekDate)}`;
+                                {dailyTrend.map(point => {
+                                    const trendDate = new Date(point.date);
+                                    const label = trendDate.toLocaleDateString(undefined, {
+                                        month: 'short',
+                                        day: 'numeric',
+                                    });
                                     return (
-                                        <div key={point.week} className='flex flex-col items-center flex-1 text-center'>
+                                        <div key={point.date} className='flex flex-col items-center flex-1 text-center'>
                                             <div className='text-xs font-medium text-white mb-1'>{point.calories}</div>
                                             <div className='text-xs text-slate-300'>{label}</div>
                                         </div>
