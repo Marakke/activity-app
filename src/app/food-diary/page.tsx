@@ -554,19 +554,23 @@ If data is missing, best-guess typical values. Description: ${mealDescription.tr
     return (
         <div className='min-h-screen bg-slate-800'>
             <div className='container mx-auto px-4 py-4 sm:py-8 max-w-4xl'>
-                <div className='flex items-center justify-between mb-6'>
-                    <div>
+                <div className='grid gap-4 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-start sm:gap-8 mb-6'>
+                    <div className='hidden sm:block w-36'></div>
+                    <div className='text-center max-w-2xl mx-auto'>
                         <h1 className='text-2xl sm:text-4xl font-bold text-white mb-1'>Food Diary</h1>
                         <p className='text-white/80 text-sm sm:text-base'>
                             Log meals, track macros, and visualize your daily calorie trends.
                         </p>
                     </div>
-                    <Link
-                        href='/'
-                        className='text-sm sm:text-base text-slate-300 hover:text-white border border-slate-600 px-3 py-2 rounded-lg transition-colors'
-                    >
-                        ← Back to Activity Tracker
-                    </Link>
+                    <div className='flex justify-start sm:justify-end w-full sm:w-36'>
+                        <Link
+                            href='/'
+                            className='text-sm sm:text-base text-slate-300 hover:text-white border border-slate-600 hover:border-slate-400 px-3 py-2 rounded-lg transition-colors flex items-center gap-2'
+                        >
+                            <span aria-hidden='true'>←</span>
+                            <span>Back</span>
+                        </Link>
+                    </div>
                 </div>
 
                 <div className='bg-slate-700 rounded-lg p-4 sm:p-6 mb-6'>
@@ -753,7 +757,7 @@ If data is missing, best-guess typical values. Description: ${mealDescription.tr
                                 type='button'
                                 onClick={handleAnalyzeMeal}
                                 disabled={isAnalyzingMeal || !mealDescription.trim()}
-                                className='inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-purple-500/80 hover:bg-purple-500 text-white transition-colors disabled:bg-slate-600 disabled:text-slate-300 disabled:cursor-not-allowed'
+                                className='inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-purple-500/80 hover:bg-purple-500 text-white transition-colors cursor-pointer disabled:bg-slate-600 disabled:text-slate-300 disabled:cursor-not-allowed'
                             >
                                 {isAnalyzingMeal ? 'Analyzing meal…' : 'Analyze with AI'}
                             </button>
