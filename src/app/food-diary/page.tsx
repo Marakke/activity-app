@@ -128,6 +128,11 @@ function parseNumberInput(value: string): number {
 }
 
 function formatMealTime(value: string): string {
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) {
+        return getLocalTimeHHMM(parsed);
+    }
+
     const match = value.match(/\d{2}:\d{2}/);
     if (match) {
         return normalizeTimeInput(match[0]);
@@ -136,11 +141,6 @@ function formatMealTime(value: string): string {
     const dotMatch = value.match(/\d{2}\.\d{2}/);
     if (dotMatch) {
         return normalizeTimeInput(dotMatch[0]);
-    }
-
-    const parsed = new Date(value);
-    if (!Number.isNaN(parsed.getTime())) {
-        return getLocalTimeHHMM(parsed);
     }
 
     return normalizeTimeInput(value);
