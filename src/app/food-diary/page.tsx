@@ -7,12 +7,16 @@ import Link from 'next/link';
 
 import { supabase } from '@/lib/supabase';
 import {
+    createSavedMeal,
     deleteMeal,
     getDailyTotalsForRange,
     getMealsForRange,
+    getSavedMeals,
+    updateSavedMeal,
     type DailyTotals,
     type Meal,
     type MealInput,
+    type SavedMeal,
     upsertMeal,
 } from '@/lib/meals';
 
@@ -200,6 +204,10 @@ export default function FoodDiaryPage() {
     const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
     const [isTimePickerOpen, setIsTimePickerOpen] = useState(false);
     const [datePickerMonth, setDatePickerMonth] = useState(() => startOfMonth(new Date()));
+    const [savedMeals, setSavedMeals] = useState<SavedMeal[]>([]);
+    const [selectedSavedMealId, setSelectedSavedMealId] = useState<string>('');
+    const [isSavingTemplate, setIsSavingTemplate] = useState(false);
+    const [saveTemplateError, setSaveTemplateError] = useState<string | null>(null);
 
     const datePickerRef = useRef<HTMLDivElement | null>(null);
     const timePickerRef = useRef<HTMLDivElement | null>(null);
@@ -246,6 +254,22 @@ export default function FoodDiaryPage() {
 
         load();
     }, [user, selectedDate]);
+
+    useEffect(() => {
+        if (!user) return;
+
+        const loadSavedMeals = async () => {
+            try {
+                const savedMealsData = await getSavedMeals(user.id);
+                setSavedMeals(savedMealsData);
+            } catch {
+                // Error is already logged in getSavedMeals, just handle gracefully
+                setSavedMeals([]);
+            }
+        };
+
+        loadSavedMeals();
+    }, [user]);
 
     useEffect(() => {
         setDatePickerMonth(startOfMonth(selectedDate));
@@ -409,6 +433,94 @@ export default function FoodDiaryPage() {
         setMealTime(normalizeTimeInput(getLocalTimeHHMM(new Date())));
         setMealDescription('');
         setAiEstimateError(null);
+        setSelectedSavedMealId('');
+    };
+
+    const handleSavedMealSelect = (mealId: string) => {
+        setSelectedSavedMealId(mealId);
+        if (!mealId) return;
+
+        const savedMeal = savedMeals.find(meal => meal.id === mealId);
+        if (savedMeal) {
+            setMealName(savedMeal.meal_name);
+            setCalories(String(savedMeal.calories));
+            setProtein(String(savedMeal.protein));
+            setCarbs(String(savedMeal.carbs));
+            setFats(String(savedMeal.fats));
+        }
+    };
+
+    const handleSaveAsTemplate = async () => {
+        if (!user) return;
+        if (!mealName.trim()) {
+            setSaveTemplateError('Meal name is required');
+            return;
+        }
+
+        const parsedCaloriesRaw = parseNumberInput(calories);
+        if (Number.isNaN(parsedCaloriesRaw) || parsedCaloriesRaw < 0) {
+            setSaveTemplateError('Valid calories value is required');
+            return;
+        }
+
+        const parsedProteinRaw = protein ? parseNumberInput(protein) : 0;
+        const parsedCarbsRaw = carbs ? parseNumberInput(carbs) : 0;
+        const parsedFatsRaw = fats ? parseNumberInput(fats) : 0;
+
+        if (Number.isNaN(parsedProteinRaw) || parsedProteinRaw < 0) {
+            setSaveTemplateError('Valid protein value is required');
+            return;
+        }
+        if (Number.isNaN(parsedCarbsRaw) || parsedCarbsRaw < 0) {
+            setSaveTemplateError('Valid carbs value is required');
+            return;
+        }
+        if (Number.isNaN(parsedFatsRaw) || parsedFatsRaw < 0) {
+            setSaveTemplateError('Valid fats value is required');
+            return;
+        }
+
+        setIsSavingTemplate(true);
+        setSaveTemplateError(null);
+
+        try {
+            const parsedCalories = Math.round(parsedCaloriesRaw);
+            const parsedProtein = Math.round(parsedProteinRaw);
+            const parsedCarbs = Math.round(parsedCarbsRaw);
+            const parsedFats = Math.round(parsedFatsRaw);
+
+            // Check if a saved meal with the same name already exists
+            const existingMeal = savedMeals.find(meal => meal.meal_name.trim() === mealName.trim());
+
+            if (existingMeal) {
+                // Update existing saved meal
+                await updateSavedMeal(user.id, existingMeal.id, {
+                    meal_name: mealName.trim(),
+                    calories: parsedCalories,
+                    protein: parsedProtein,
+                    carbs: parsedCarbs,
+                    fats: parsedFats,
+                });
+            } else {
+                // Create new saved meal
+                await createSavedMeal(user.id, {
+                    meal_name: mealName.trim(),
+                    calories: parsedCalories,
+                    protein: parsedProtein,
+                    carbs: parsedCarbs,
+                    fats: parsedFats,
+                });
+            }
+
+            // Reload saved meals
+            const updatedSavedMeals = await getSavedMeals(user.id);
+            setSavedMeals(updatedSavedMeals);
+        } catch (error) {
+            console.error('Failed to save template:', error);
+            setSaveTemplateError('Failed to save template. Please try again.');
+        } finally {
+            setIsSavingTemplate(false);
+        }
     };
 
     const handleAnalyzeMeal = async () => {
@@ -575,6 +687,23 @@ If data is missing, best-guess typical values. Description: ${mealDescription.tr
 
                 <div className='bg-slate-700 rounded-lg p-4 sm:p-6 mb-6'>
                     <h2 className='text-white text-lg font-semibold mb-4'>Add Meal</h2>
+                    {savedMeals.length > 0 && (
+                        <div className='mb-4'>
+                            <label className='block text-sm text-white mb-2'>Select saved meal (optional)</label>
+                            <select
+                                value={selectedSavedMealId}
+                                onChange={event => handleSavedMealSelect(event.target.value)}
+                                className='w-full h-12 px-3 py-2 border border-slate-600 rounded-lg bg-slate-600 text-white cursor-pointer'
+                            >
+                                <option value=''>-- Select a saved meal --</option>
+                                {savedMeals.map(meal => (
+                                    <option key={meal.id} value={meal.id}>
+                                        {meal.meal_name} ({meal.calories} cal)
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
                     <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
                         <div>
                             <label className='block text-sm text-white mb-2'>Date</label>
@@ -820,7 +949,14 @@ If data is missing, best-guess typical values. Description: ${mealDescription.tr
                             />
                         </div>
                     </div>
-                    <div className='mt-4 flex justify-end'>
+                    <div className='mt-4 flex justify-end gap-3'>
+                        <button
+                            onClick={handleSaveAsTemplate}
+                            disabled={isSavingTemplate || !mealName.trim() || !calories}
+                            className='px-4 py-2 bg-slate-600/80 text-white rounded-lg hover:bg-slate-600 transition-colors disabled:bg-slate-700 disabled:text-slate-400 disabled:cursor-not-allowed cursor-pointer'
+                        >
+                            {isSavingTemplate ? 'Saving...' : 'Save as Template'}
+                        </button>
                         <button
                             onClick={handleAddMeal}
                             disabled={isSaving || !mealName.trim() || !calories}
@@ -829,6 +965,7 @@ If data is missing, best-guess typical values. Description: ${mealDescription.tr
                             {isSaving ? 'Saving...' : 'Add Meal'}
                         </button>
                     </div>
+                    {saveTemplateError && <div className='mt-2 text-sm text-red-300'>{saveTemplateError}</div>}
                 </div>
 
                 <div className='grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-6'>
