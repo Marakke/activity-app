@@ -1,0 +1,45 @@
+# Project Rules
+
+## Framework & Libraries
+- Use **Next.js 15** with App Router
+- Use **React 19** features and patterns
+- Use **Tailwind CSS v4** for styling
+- Use **TypeScript** with strict mode
+
+## Code Style & Formatting
+- Follow the project's ESLint and Prettier configuration
+
+## Next.js 15 Best Practices
+- Use Server Components by default
+- Use Client Components only when necessary (interactivity, hooks, browser APIs)
+- Use `'use client'` directive at the top of Client Components
+- Leverage React 19 features like Server Actions, Server Components, and improved Suspense
+- Use async/await in Server Components for data fetching
+- Prefer `fetch` with Next.js caching strategies
+
+## React 19 Best Practices
+- Use React 19 hooks and patterns
+- Prefer function components
+- Use proper TypeScript types for props
+- Handle loading and error states appropriately
+
+## Tailwind CSS
+- Use Tailwind utility classes for styling
+- Prefer Tailwind classes over custom CSS when possible
+- Use Tailwind's responsive breakpoints
+- Follow Tailwind's design system conventions
+- Add `pointer-cusor` to hoverable buttons
+
+## File Organization
+- Use the `@/` alias for imports from the `src/` directory
+- Follow the existing project structure
+- Place components in `src/components/`
+- Place utilities in `src/lib/`
+
+## Code Quality
+- Write clean, readable, and maintainable code
+- Use meaningful variable and function names
+- Add comments for complex logic, BUT do not use comments for 'obvious' code snippets
+- Follow TypeScript best practices
+- Ensure type safety
+

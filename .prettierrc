@@ -9,6 +9,6 @@
     "arrowParens": "avoid",
     "endOfLine": "lf",
     "jsxSingleQuote": true,
-    "jsxBracketSameLine": false,
+    "bracketSameLine": false,
     "htmlWhitespaceSensitivity": "css"
 }
