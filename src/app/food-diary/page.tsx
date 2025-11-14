@@ -63,6 +63,55 @@ function ClockIcon(props: IconProps) {
     );
 }
 
+function ChevronDownIcon(props: IconProps) {
+    return (
+        <svg
+            viewBox='0 0 24 24'
+            fill='none'
+            stroke='currentColor'
+            strokeWidth='1.5'
+            strokeLinecap='round'
+            strokeLinejoin='round'
+            {...props}
+        >
+            <path d='m6 9 6 6 6-6' />
+        </svg>
+    );
+}
+
+function ArrowLeftIcon(props: IconProps) {
+    return (
+        <svg
+            viewBox='0 0 24 24'
+            fill='none'
+            stroke='currentColor'
+            strokeWidth='2'
+            strokeLinecap='round'
+            strokeLinejoin='round'
+            {...props}
+        >
+            <path d='M18 12H6' />
+            <path d='m9 5-7 7 7 7' />
+        </svg>
+    );
+}
+
+function SpinnerIcon(props: IconProps) {
+    return (
+        <svg
+            viewBox='0 0 24 24'
+            fill='none'
+            stroke='currentColor'
+            strokeWidth='2'
+            strokeLinecap='round'
+            strokeLinejoin='round'
+            {...props}
+        >
+            <path d='M21 12a9 9 0 1 1-6.219-8.56' />
+        </svg>
+    );
+}
+
 function formatDateKey(date: Date): string {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -650,7 +699,10 @@ If data is missing, best-guess typical values. Description: ${mealDescription.tr
     if (isLoading) {
         return (
             <div className='min-h-screen bg-slate-800 flex items-center justify-center'>
-                <div className='text-white text-xl'>Loading food diary...</div>
+                <div className='flex flex-col items-center gap-4'>
+                    <SpinnerIcon className='w-12 h-12 text-white animate-spin' />
+                    <div className='text-white text-xl'>Loading food diary...</div>
+                </div>
             </div>
         );
     }
@@ -679,7 +731,7 @@ If data is missing, best-guess typical values. Description: ${mealDescription.tr
                             href='/'
                             className='text-sm sm:text-base text-slate-300 hover:text-white border border-slate-600 hover:border-slate-400 px-3 py-2 rounded-lg transition-colors flex items-center gap-2'
                         >
-                            <span aria-hidden='true'>←</span>
+                            <ArrowLeftIcon className='w-4 h-4' aria-hidden='true' />
                             <span>Back</span>
                         </Link>
                     </div>
@@ -690,18 +742,23 @@ If data is missing, best-guess typical values. Description: ${mealDescription.tr
                     {savedMeals.length > 0 && (
                         <div className='mb-4'>
                             <label className='block text-sm text-white mb-2'>Select saved meal (optional)</label>
-                            <select
-                                value={selectedSavedMealId}
-                                onChange={event => handleSavedMealSelect(event.target.value)}
-                                className='w-full h-12 px-3 py-2 border border-slate-600 rounded-lg bg-slate-600 text-white cursor-pointer'
-                            >
-                                <option value=''>-- Select a saved meal --</option>
-                                {savedMeals.map(meal => (
-                                    <option key={meal.id} value={meal.id}>
-                                        {meal.meal_name} ({meal.calories} cal)
-                                    </option>
-                                ))}
-                            </select>
+                            <div className='relative'>
+                                <select
+                                    value={selectedSavedMealId}
+                                    onChange={event => handleSavedMealSelect(event.target.value)}
+                                    className='w-full h-12 px-3 pr-12 py-2 border border-slate-600 rounded-lg bg-slate-600 text-white cursor-pointer appearance-none'
+                                >
+                                    <option value=''>-- Select a saved meal --</option>
+                                    {savedMeals.map(meal => (
+                                        <option key={meal.id} value={meal.id}>
+                                            {meal.meal_name} ({meal.calories} cal)
+                                        </option>
+                                    ))}
+                                </select>
+                                <div className='absolute inset-y-0 right-2 flex items-center pointer-events-none'>
+                                    <ChevronDownIcon className='w-5 h-5 text-slate-200' />
+                                </div>
+                            </div>
                         </div>
                     )}
                     <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
