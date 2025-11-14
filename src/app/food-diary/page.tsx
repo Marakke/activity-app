@@ -257,9 +257,12 @@ export default function FoodDiaryPage() {
     const [selectedSavedMealId, setSelectedSavedMealId] = useState<string>('');
     const [isSavingTemplate, setIsSavingTemplate] = useState(false);
     const [saveTemplateError, setSaveTemplateError] = useState<string | null>(null);
+    const [menuOpenMealId, setMenuOpenMealId] = useState<string | null>(null);
+    const [editingMealId, setEditingMealId] = useState<string | null>(null);
 
     const datePickerRef = useRef<HTMLDivElement | null>(null);
     const timePickerRef = useRef<HTMLDivElement | null>(null);
+    const menuRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
     const ai = new GoogleGenAI({ apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY ?? '' });
 
@@ -323,6 +326,21 @@ export default function FoodDiaryPage() {
     useEffect(() => {
         setDatePickerMonth(startOfMonth(selectedDate));
     }, [selectedDate]);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (menuOpenMealId) {
+                const menu = menuRefs.current[menuOpenMealId];
+                const target = event.target as Node;
+                if (menu && !menu.contains(target)) {
+                    setMenuOpenMealId(null);
+                }
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [menuOpenMealId]);
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -483,6 +501,23 @@ export default function FoodDiaryPage() {
         setMealDescription('');
         setAiEstimateError(null);
         setSelectedSavedMealId('');
+        setEditingMealId(null);
+    };
+
+    const handleEditMeal = (meal: Meal) => {
+        setEditingMealId(meal.id);
+        setMealName(meal.meal_name);
+        setCalories(String(meal.calories));
+        setProtein(String(meal.protein));
+        setCarbs(String(meal.carbs));
+        setFats(String(meal.fats));
+        setNotes(meal.notes || '');
+        const mealDate = new Date(meal.meal_time);
+        setSelectedDate(mealDate);
+        setMealTime(formatMealTime(meal.meal_time));
+        setMenuOpenMealId(null);
+        // Scroll to form
+        window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
     const handleSavedMealSelect = (mealId: string) => {
@@ -647,7 +682,7 @@ If data is missing, best-guess typical values. Description: ${mealDescription.tr
         const parsedCarbs = Math.round(parsedCarbsRaw);
         const parsedFats = Math.round(parsedFatsRaw);
 
-        const mealInput: MealInput = {
+        const mealInput: MealInput & { id?: string } = {
             meal_time: combineDateAndTime(selectedDate, mealTime || '12:00'),
             meal_name: mealName.trim(),
             calories: parsedCalories,
@@ -656,6 +691,11 @@ If data is missing, best-guess typical values. Description: ${mealDescription.tr
             fats: parsedFats,
             notes: notes.trim() || undefined,
         };
+
+        // If editing, include the meal ID
+        if (editingMealId) {
+            mealInput.id = editingMealId;
+        }
 
         setIsSaving(true);
         try {
@@ -1007,20 +1047,41 @@ If data is missing, best-guess typical values. Description: ${mealDescription.tr
                         </div>
                     </div>
                     <div className='mt-4 flex justify-end gap-3'>
-                        <button
-                            onClick={handleSaveAsTemplate}
-                            disabled={isSavingTemplate || !mealName.trim() || !calories}
-                            className='px-4 py-2 bg-slate-600/80 text-white rounded-lg hover:bg-slate-600 transition-colors disabled:bg-slate-700 disabled:text-slate-400 disabled:cursor-not-allowed cursor-pointer'
-                        >
-                            {isSavingTemplate ? 'Saving...' : 'Save as Template'}
-                        </button>
-                        <button
-                            onClick={handleAddMeal}
-                            disabled={isSaving || !mealName.trim() || !calories}
-                            className='px-4 py-2 bg-blue-500/80 text-white rounded-lg hover:bg-blue-500 transition-colors disabled:bg-slate-600 disabled:cursor-not-allowed cursor-pointer'
-                        >
-                            {isSaving ? 'Saving...' : 'Add Meal'}
-                        </button>
+                        {editingMealId ? (
+                            <>
+                                <button
+                                    onClick={resetForm}
+                                    disabled={isSaving}
+                                    className='px-4 py-2 bg-slate-600/80 text-white rounded-lg hover:bg-slate-600 transition-colors disabled:bg-slate-700 disabled:text-slate-400 disabled:cursor-not-allowed cursor-pointer'
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleAddMeal}
+                                    disabled={isSaving || !mealName.trim() || !calories}
+                                    className='px-4 py-2 bg-blue-500/80 text-white rounded-lg hover:bg-blue-500 transition-colors disabled:bg-slate-600 disabled:cursor-not-allowed cursor-pointer'
+                                >
+                                    {isSaving ? 'Updating...' : 'Update Meal'}
+                                </button>
+                            </>
+                        ) : (
+                            <>
+                                <button
+                                    onClick={handleSaveAsTemplate}
+                                    disabled={isSavingTemplate || !mealName.trim() || !calories}
+                                    className='px-4 py-2 bg-slate-600/80 text-white rounded-lg hover:bg-slate-600 transition-colors disabled:bg-slate-700 disabled:text-slate-400 disabled:cursor-not-allowed cursor-pointer'
+                                >
+                                    {isSavingTemplate ? 'Saving...' : 'Save as Template'}
+                                </button>
+                                <button
+                                    onClick={handleAddMeal}
+                                    disabled={isSaving || !mealName.trim() || !calories}
+                                    className='px-4 py-2 bg-blue-500/80 text-white rounded-lg hover:bg-blue-500 transition-colors disabled:bg-slate-600 disabled:cursor-not-allowed cursor-pointer'
+                                >
+                                    {isSaving ? 'Saving...' : 'Add Meal'}
+                                </button>
+                            </>
+                        )}
                     </div>
                     {saveTemplateError && <div className='mt-2 text-sm text-red-300'>{saveTemplateError}</div>}
                 </div>
@@ -1131,13 +1192,50 @@ If data is missing, best-guess typical values. Description: ${mealDescription.tr
                                                                 {meal.notes ?? '—'}
                                                             </td>
                                                             <td className='px-3 py-2 text-right'>
-                                                                <button
-                                                                    onClick={() => handleDeleteMeal(meal.id)}
-                                                                    disabled={isDeleting === meal.id}
-                                                                    className='text-red-400 hover:text-red-200 transition-colors disabled:text-red-900'
-                                                                >
-                                                                    {isDeleting === meal.id ? 'Removing...' : 'Remove'}
-                                                                </button>
+                                                                <div className='flex justify-end relative'>
+                                                                    <button
+                                                                        onClick={() =>
+                                                                            setMenuOpenMealId(
+                                                                                menuOpenMealId === meal.id
+                                                                                    ? null
+                                                                                    : meal.id
+                                                                            )
+                                                                        }
+                                                                        className='text-slate-300 py-1 px-2 hover:text-white text-xl font-bold cursor-pointer'
+                                                                        aria-haspopup='menu'
+                                                                        aria-expanded={menuOpenMealId === meal.id}
+                                                                        aria-label='Meal options'
+                                                                    >
+                                                                        ⋯
+                                                                    </button>
+                                                                    {menuOpenMealId === meal.id && (
+                                                                        <div
+                                                                            ref={el => {
+                                                                                menuRefs.current[meal.id] = el;
+                                                                            }}
+                                                                            className='absolute z-10 mt-1 right-0 bg-slate-800 border border-slate-700 rounded-md shadow-lg w-32 text-sm'
+                                                                        >
+                                                                            <button
+                                                                                className='w-full text-left px-3 py-2 hover:bg-slate-700 text-white cursor-pointer rounded-t-md'
+                                                                                onClick={() => handleEditMeal(meal)}
+                                                                            >
+                                                                                Edit
+                                                                            </button>
+                                                                            <button
+                                                                                className='w-full text-left px-3 py-2 hover:bg-slate-700 text-red-400 hover:text-red-300 cursor-pointer rounded-b-md'
+                                                                                onClick={() => {
+                                                                                    handleDeleteMeal(meal.id);
+                                                                                    setMenuOpenMealId(null);
+                                                                                }}
+                                                                                disabled={isDeleting === meal.id}
+                                                                            >
+                                                                                {isDeleting === meal.id
+                                                                                    ? 'Removing...'
+                                                                                    : 'Remove'}
+                                                                            </button>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
                                                             </td>
                                                         </tr>
                                                     );
