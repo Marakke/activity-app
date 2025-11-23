@@ -14,6 +14,25 @@ interface ActivityRow {
     completedDays: string[];
 }
 
+type IconProps = React.SVGProps<SVGSVGElement>;
+
+function ArrowRightIcon(props: IconProps) {
+    return (
+        <svg
+            viewBox='0 0 24 24'
+            fill='none'
+            stroke='currentColor'
+            strokeWidth='2'
+            strokeLinecap='round'
+            strokeLinejoin='round'
+            {...props}
+        >
+            <path d='M6 12h12' />
+            <path d='m15 5 7 7-7 7' />
+        </svg>
+    );
+}
+
 const formatDateKey = (date: Date): string => {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -79,7 +98,9 @@ export default function Home() {
         const today = new Date();
         const startOfWeek = new Date(today);
         startOfWeek.setHours(0, 0, 0, 0);
-        startOfWeek.setDate(today.getDate() - today.getDay() + 1); // Start from Monday
+        const dayOfWeek = today.getDay();
+        const daysToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+        startOfWeek.setDate(today.getDate() + daysToMonday);
 
         const weekDates = [];
         for (let i = 0; i < 7; i++) {
@@ -620,7 +641,7 @@ export default function Home() {
                             className='w-full inline-flex justify-center items-center gap-2 text-sm sm:text-base text-slate-300 hover:text-white border border-slate-600 hover:border-slate-400 px-3 py-2 rounded-lg transition-colors'
                         >
                             <span>Food Diary</span>
-                            <span aria-hidden='true'>→</span>
+                            <ArrowRightIcon className='w-4 h-4' aria-hidden='true' />
                         </Link>
                         <button
                             onClick={handleLogout}

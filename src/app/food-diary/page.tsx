@@ -7,12 +7,16 @@ import Link from 'next/link';
 
 import { supabase } from '@/lib/supabase';
 import {
+    createSavedMeal,
     deleteMeal,
     getDailyTotalsForRange,
     getMealsForRange,
+    getSavedMeals,
+    updateSavedMeal,
     type DailyTotals,
     type Meal,
     type MealInput,
+    type SavedMeal,
     upsertMeal,
 } from '@/lib/meals';
 
@@ -55,6 +59,55 @@ function ClockIcon(props: IconProps) {
         >
             <circle cx='12' cy='12' r='9' />
             <path d='M12 7.5v4.5l2.5 2.5' />
+        </svg>
+    );
+}
+
+function ChevronDownIcon(props: IconProps) {
+    return (
+        <svg
+            viewBox='0 0 24 24'
+            fill='none'
+            stroke='currentColor'
+            strokeWidth='1.5'
+            strokeLinecap='round'
+            strokeLinejoin='round'
+            {...props}
+        >
+            <path d='m6 9 6 6 6-6' />
+        </svg>
+    );
+}
+
+function ArrowLeftIcon(props: IconProps) {
+    return (
+        <svg
+            viewBox='0 0 24 24'
+            fill='none'
+            stroke='currentColor'
+            strokeWidth='2'
+            strokeLinecap='round'
+            strokeLinejoin='round'
+            {...props}
+        >
+            <path d='M18 12H6' />
+            <path d='m9 5-7 7 7 7' />
+        </svg>
+    );
+}
+
+function SpinnerIcon(props: IconProps) {
+    return (
+        <svg
+            viewBox='0 0 24 24'
+            fill='none'
+            stroke='currentColor'
+            strokeWidth='2'
+            strokeLinecap='round'
+            strokeLinejoin='round'
+            {...props}
+        >
+            <path d='M21 12a9 9 0 1 1-6.219-8.56' />
         </svg>
     );
 }
@@ -200,9 +253,16 @@ export default function FoodDiaryPage() {
     const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
     const [isTimePickerOpen, setIsTimePickerOpen] = useState(false);
     const [datePickerMonth, setDatePickerMonth] = useState(() => startOfMonth(new Date()));
+    const [savedMeals, setSavedMeals] = useState<SavedMeal[]>([]);
+    const [selectedSavedMealId, setSelectedSavedMealId] = useState<string>('');
+    const [isSavingTemplate, setIsSavingTemplate] = useState(false);
+    const [saveTemplateError, setSaveTemplateError] = useState<string | null>(null);
+    const [menuOpenMealId, setMenuOpenMealId] = useState<string | null>(null);
+    const [editingMealId, setEditingMealId] = useState<string | null>(null);
 
     const datePickerRef = useRef<HTMLDivElement | null>(null);
     const timePickerRef = useRef<HTMLDivElement | null>(null);
+    const menuRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
     const ai = new GoogleGenAI({ apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY ?? '' });
 
@@ -248,8 +308,39 @@ export default function FoodDiaryPage() {
     }, [user, selectedDate]);
 
     useEffect(() => {
+        if (!user) return;
+
+        const loadSavedMeals = async () => {
+            try {
+                const savedMealsData = await getSavedMeals(user.id);
+                setSavedMeals(savedMealsData);
+            } catch {
+                // Error is already logged in getSavedMeals, just handle gracefully
+                setSavedMeals([]);
+            }
+        };
+
+        loadSavedMeals();
+    }, [user]);
+
+    useEffect(() => {
         setDatePickerMonth(startOfMonth(selectedDate));
     }, [selectedDate]);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (menuOpenMealId) {
+                const menu = menuRefs.current[menuOpenMealId];
+                const target = event.target as Node;
+                if (menu && !menu.contains(target)) {
+                    setMenuOpenMealId(null);
+                }
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [menuOpenMealId]);
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -409,6 +500,111 @@ export default function FoodDiaryPage() {
         setMealTime(normalizeTimeInput(getLocalTimeHHMM(new Date())));
         setMealDescription('');
         setAiEstimateError(null);
+        setSelectedSavedMealId('');
+        setEditingMealId(null);
+    };
+
+    const handleEditMeal = (meal: Meal) => {
+        setEditingMealId(meal.id);
+        setMealName(meal.meal_name);
+        setCalories(String(meal.calories));
+        setProtein(String(meal.protein));
+        setCarbs(String(meal.carbs));
+        setFats(String(meal.fats));
+        setNotes(meal.notes || '');
+        const mealDate = new Date(meal.meal_time);
+        setSelectedDate(mealDate);
+        setMealTime(formatMealTime(meal.meal_time));
+        setMenuOpenMealId(null);
+        // Scroll to form
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    const handleSavedMealSelect = (mealId: string) => {
+        setSelectedSavedMealId(mealId);
+        if (!mealId) return;
+
+        const savedMeal = savedMeals.find(meal => meal.id === mealId);
+        if (savedMeal) {
+            setMealName(savedMeal.meal_name);
+            setCalories(String(savedMeal.calories));
+            setProtein(String(savedMeal.protein));
+            setCarbs(String(savedMeal.carbs));
+            setFats(String(savedMeal.fats));
+        }
+    };
+
+    const handleSaveAsTemplate = async () => {
+        if (!user) return;
+        if (!mealName.trim()) {
+            setSaveTemplateError('Meal name is required');
+            return;
+        }
+
+        const parsedCaloriesRaw = parseNumberInput(calories);
+        if (Number.isNaN(parsedCaloriesRaw) || parsedCaloriesRaw < 0) {
+            setSaveTemplateError('Valid calories value is required');
+            return;
+        }
+
+        const parsedProteinRaw = protein ? parseNumberInput(protein) : 0;
+        const parsedCarbsRaw = carbs ? parseNumberInput(carbs) : 0;
+        const parsedFatsRaw = fats ? parseNumberInput(fats) : 0;
+
+        if (Number.isNaN(parsedProteinRaw) || parsedProteinRaw < 0) {
+            setSaveTemplateError('Valid protein value is required');
+            return;
+        }
+        if (Number.isNaN(parsedCarbsRaw) || parsedCarbsRaw < 0) {
+            setSaveTemplateError('Valid carbs value is required');
+            return;
+        }
+        if (Number.isNaN(parsedFatsRaw) || parsedFatsRaw < 0) {
+            setSaveTemplateError('Valid fats value is required');
+            return;
+        }
+
+        setIsSavingTemplate(true);
+        setSaveTemplateError(null);
+
+        try {
+            const parsedCalories = Math.round(parsedCaloriesRaw);
+            const parsedProtein = Math.round(parsedProteinRaw);
+            const parsedCarbs = Math.round(parsedCarbsRaw);
+            const parsedFats = Math.round(parsedFatsRaw);
+
+            // Check if a saved meal with the same name already exists
+            const existingMeal = savedMeals.find(meal => meal.meal_name.trim() === mealName.trim());
+
+            if (existingMeal) {
+                // Update existing saved meal
+                await updateSavedMeal(user.id, existingMeal.id, {
+                    meal_name: mealName.trim(),
+                    calories: parsedCalories,
+                    protein: parsedProtein,
+                    carbs: parsedCarbs,
+                    fats: parsedFats,
+                });
+            } else {
+                // Create new saved meal
+                await createSavedMeal(user.id, {
+                    meal_name: mealName.trim(),
+                    calories: parsedCalories,
+                    protein: parsedProtein,
+                    carbs: parsedCarbs,
+                    fats: parsedFats,
+                });
+            }
+
+            // Reload saved meals
+            const updatedSavedMeals = await getSavedMeals(user.id);
+            setSavedMeals(updatedSavedMeals);
+        } catch (error) {
+            console.error('Failed to save template:', error);
+            setSaveTemplateError('Failed to save template. Please try again.');
+        } finally {
+            setIsSavingTemplate(false);
+        }
     };
 
     const handleAnalyzeMeal = async () => {
@@ -486,7 +682,7 @@ If data is missing, best-guess typical values. Description: ${mealDescription.tr
         const parsedCarbs = Math.round(parsedCarbsRaw);
         const parsedFats = Math.round(parsedFatsRaw);
 
-        const mealInput: MealInput = {
+        const mealInput: MealInput & { id?: string } = {
             meal_time: combineDateAndTime(selectedDate, mealTime || '12:00'),
             meal_name: mealName.trim(),
             calories: parsedCalories,
@@ -495,6 +691,11 @@ If data is missing, best-guess typical values. Description: ${mealDescription.tr
             fats: parsedFats,
             notes: notes.trim() || undefined,
         };
+
+        // If editing, include the meal ID
+        if (editingMealId) {
+            mealInput.id = editingMealId;
+        }
 
         setIsSaving(true);
         try {
@@ -538,7 +739,10 @@ If data is missing, best-guess typical values. Description: ${mealDescription.tr
     if (isLoading) {
         return (
             <div className='min-h-screen bg-slate-800 flex items-center justify-center'>
-                <div className='text-white text-xl'>Loading food diary...</div>
+                <div className='flex flex-col items-center gap-4'>
+                    <SpinnerIcon className='w-12 h-12 text-white animate-spin' />
+                    <div className='text-white text-xl'>Loading food diary...</div>
+                </div>
             </div>
         );
     }
@@ -567,7 +771,7 @@ If data is missing, best-guess typical values. Description: ${mealDescription.tr
                             href='/'
                             className='text-sm sm:text-base text-slate-300 hover:text-white border border-slate-600 hover:border-slate-400 px-3 py-2 rounded-lg transition-colors flex items-center gap-2'
                         >
-                            <span aria-hidden='true'>←</span>
+                            <ArrowLeftIcon className='w-4 h-4' aria-hidden='true' />
                             <span>Back</span>
                         </Link>
                     </div>
@@ -575,6 +779,28 @@ If data is missing, best-guess typical values. Description: ${mealDescription.tr
 
                 <div className='bg-slate-700 rounded-lg p-4 sm:p-6 mb-6'>
                     <h2 className='text-white text-lg font-semibold mb-4'>Add Meal</h2>
+                    {savedMeals.length > 0 && (
+                        <div className='mb-4'>
+                            <label className='block text-sm text-white mb-2'>Select saved meal (optional)</label>
+                            <div className='relative'>
+                                <select
+                                    value={selectedSavedMealId}
+                                    onChange={event => handleSavedMealSelect(event.target.value)}
+                                    className='w-full h-12 px-3 pr-12 py-2 border border-slate-600 rounded-lg bg-slate-600 text-white cursor-pointer appearance-none'
+                                >
+                                    <option value=''>-- Select a saved meal --</option>
+                                    {savedMeals.map(meal => (
+                                        <option key={meal.id} value={meal.id}>
+                                            {meal.meal_name} ({meal.calories} cal)
+                                        </option>
+                                    ))}
+                                </select>
+                                <div className='absolute inset-y-0 right-2 flex items-center pointer-events-none'>
+                                    <ChevronDownIcon className='w-5 h-5 text-slate-200' />
+                                </div>
+                            </div>
+                        </div>
+                    )}
                     <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
                         <div>
                             <label className='block text-sm text-white mb-2'>Date</label>
@@ -820,15 +1046,44 @@ If data is missing, best-guess typical values. Description: ${mealDescription.tr
                             />
                         </div>
                     </div>
-                    <div className='mt-4 flex justify-end'>
-                        <button
-                            onClick={handleAddMeal}
-                            disabled={isSaving || !mealName.trim() || !calories}
-                            className='px-4 py-2 bg-blue-500/80 text-white rounded-lg hover:bg-blue-500 transition-colors disabled:bg-slate-600 disabled:cursor-not-allowed cursor-pointer'
-                        >
-                            {isSaving ? 'Saving...' : 'Add Meal'}
-                        </button>
+                    <div className='mt-4 flex justify-end gap-3'>
+                        {editingMealId ? (
+                            <>
+                                <button
+                                    onClick={resetForm}
+                                    disabled={isSaving}
+                                    className='px-4 py-2 bg-slate-600/80 text-white rounded-lg hover:bg-slate-600 transition-colors disabled:bg-slate-700 disabled:text-slate-400 disabled:cursor-not-allowed cursor-pointer'
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleAddMeal}
+                                    disabled={isSaving || !mealName.trim() || !calories}
+                                    className='px-4 py-2 bg-blue-500/80 text-white rounded-lg hover:bg-blue-500 transition-colors disabled:bg-slate-600 disabled:cursor-not-allowed cursor-pointer'
+                                >
+                                    {isSaving ? 'Updating...' : 'Update Meal'}
+                                </button>
+                            </>
+                        ) : (
+                            <>
+                                <button
+                                    onClick={handleSaveAsTemplate}
+                                    disabled={isSavingTemplate || !mealName.trim() || !calories}
+                                    className='px-4 py-2 bg-slate-600/80 text-white rounded-lg hover:bg-slate-600 transition-colors disabled:bg-slate-700 disabled:text-slate-400 disabled:cursor-not-allowed cursor-pointer'
+                                >
+                                    {isSavingTemplate ? 'Saving...' : 'Save as Template'}
+                                </button>
+                                <button
+                                    onClick={handleAddMeal}
+                                    disabled={isSaving || !mealName.trim() || !calories}
+                                    className='px-4 py-2 bg-blue-500/80 text-white rounded-lg hover:bg-blue-500 transition-colors disabled:bg-slate-600 disabled:cursor-not-allowed cursor-pointer'
+                                >
+                                    {isSaving ? 'Saving...' : 'Add Meal'}
+                                </button>
+                            </>
+                        )}
                     </div>
+                    {saveTemplateError && <div className='mt-2 text-sm text-red-300'>{saveTemplateError}</div>}
                 </div>
 
                 <div className='grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-6'>
@@ -937,13 +1192,50 @@ If data is missing, best-guess typical values. Description: ${mealDescription.tr
                                                                 {meal.notes ?? '—'}
                                                             </td>
                                                             <td className='px-3 py-2 text-right'>
-                                                                <button
-                                                                    onClick={() => handleDeleteMeal(meal.id)}
-                                                                    disabled={isDeleting === meal.id}
-                                                                    className='text-red-400 hover:text-red-200 transition-colors disabled:text-red-900'
-                                                                >
-                                                                    {isDeleting === meal.id ? 'Removing...' : 'Remove'}
-                                                                </button>
+                                                                <div className='flex justify-end relative'>
+                                                                    <button
+                                                                        onClick={() =>
+                                                                            setMenuOpenMealId(
+                                                                                menuOpenMealId === meal.id
+                                                                                    ? null
+                                                                                    : meal.id
+                                                                            )
+                                                                        }
+                                                                        className='text-slate-300 py-1 px-2 hover:text-white text-xl font-bold cursor-pointer'
+                                                                        aria-haspopup='menu'
+                                                                        aria-expanded={menuOpenMealId === meal.id}
+                                                                        aria-label='Meal options'
+                                                                    >
+                                                                        ⋯
+                                                                    </button>
+                                                                    {menuOpenMealId === meal.id && (
+                                                                        <div
+                                                                            ref={el => {
+                                                                                menuRefs.current[meal.id] = el;
+                                                                            }}
+                                                                            className='absolute z-10 mt-1 right-0 bg-slate-800 border border-slate-700 rounded-md shadow-lg w-32 text-sm'
+                                                                        >
+                                                                            <button
+                                                                                className='w-full text-left px-3 py-2 hover:bg-slate-700 text-white cursor-pointer rounded-t-md'
+                                                                                onClick={() => handleEditMeal(meal)}
+                                                                            >
+                                                                                Edit
+                                                                            </button>
+                                                                            <button
+                                                                                className='w-full text-left px-3 py-2 hover:bg-slate-700 text-red-400 hover:text-red-300 cursor-pointer rounded-b-md'
+                                                                                onClick={() => {
+                                                                                    handleDeleteMeal(meal.id);
+                                                                                    setMenuOpenMealId(null);
+                                                                                }}
+                                                                                disabled={isDeleting === meal.id}
+                                                                            >
+                                                                                {isDeleting === meal.id
+                                                                                    ? 'Removing...'
+                                                                                    : 'Remove'}
+                                                                            </button>
+                                                                        </div>
+                                                                    )}
+                                                                </div>
                                                             </td>
                                                         </tr>
                                                     );
