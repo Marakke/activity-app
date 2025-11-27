@@ -12,13 +12,16 @@ import {
     getDailyTotalsForRange,
     getMealsForRange,
     getSavedMeals,
+    getUserPreferences,
     updateSavedMeal,
     type DailyTotals,
     type Meal,
     type MealInput,
     type SavedMeal,
+    type UserPreferences,
     upsertMeal,
 } from '@/lib/meals';
+import SettingsModal from '@/components/SettingsModal';
 
 interface TrendPoint {
     date: string;
@@ -269,6 +272,8 @@ export default function FoodDiaryPage() {
     const [saveTemplateError, setSaveTemplateError] = useState<string | null>(null);
     const [menuOpenMealId, setMenuOpenMealId] = useState<string | null>(null);
     const [editingMealId, setEditingMealId] = useState<string | null>(null);
+    const [showSettings, setShowSettings] = useState(false);
+    const [userPreferences, setUserPreferences] = useState<UserPreferences | null>(null);
 
     const datePickerRef = useRef<HTMLDivElement | null>(null);
     const timePickerRef = useRef<HTMLDivElement | null>(null);
@@ -331,6 +336,22 @@ export default function FoodDiaryPage() {
         };
 
         loadSavedMeals();
+    }, [user]);
+
+    useEffect(() => {
+        if (!user) return;
+
+        const loadPreferences = async () => {
+            try {
+                const preferences = await getUserPreferences(user.id);
+                setUserPreferences(preferences);
+            } catch {
+                // Error is already logged in getUserPreferences, just handle gracefully
+                setUserPreferences(null);
+            }
+        };
+
+        loadPreferences();
     }, [user]);
 
     useEffect(() => {
@@ -844,14 +865,20 @@ If data is missing, best-guess typical values. Description: ${mealDescription.tr
                             Log meals, track macros, and visualize your daily calorie trends.
                         </p>
                     </div>
-                    <div className='flex justify-start sm:justify-end w-full sm:w-36'>
+                    <div className='flex flex-col items-start sm:items-end gap-2 w-full sm:w-36'>
                         <Link
                             href='/'
-                            className='text-sm sm:text-base text-slate-300 hover:text-white border border-slate-600 hover:border-slate-400 px-3 py-2 rounded-lg transition-colors flex items-center gap-2'
+                            className='w-full text-sm sm:text-base text-slate-300 hover:text-white border border-slate-600 hover:border-slate-400 px-3 py-2 rounded-lg transition-colors flex items-center justify-center gap-2'
                         >
                             <ArrowLeftIcon className='w-4 h-4' aria-hidden='true' />
                             <span>Back</span>
                         </Link>
+                        <button
+                            onClick={() => setShowSettings(true)}
+                            className='self-stretch px-3 py-2 text-slate-400 hover:text-white text-sm transition-colors cursor-pointer border border-transparent rounded-lg flex justify-center'
+                        >
+                            Settings
+                        </button>
                     </div>
                 </div>
 
@@ -1435,6 +1462,20 @@ If data is missing, best-guess typical values. Description: ${mealDescription.tr
                                                 />
                                             );
                                         })}
+
+                                        {userPreferences?.daily_calories_goal &&
+                                            userPreferences.daily_calories_goal > 0 &&
+                                            maxTrendCalories > 0 && (
+                                                <line
+                                                    x1='0%'
+                                                    y1={`${10 + (85 - (userPreferences.daily_calories_goal / maxTrendCalories) * 85)}%`}
+                                                    x2='100%'
+                                                    y2={`${10 + (85 - (userPreferences.daily_calories_goal / maxTrendCalories) * 85)}%`}
+                                                    stroke='#9ca3af'
+                                                    strokeWidth='2'
+                                                    strokeDasharray='5,5'
+                                                />
+                                            )}
                                     </svg>
                                 </div>
                                 <div className='flex justify-between mt-3'>
@@ -1528,6 +1569,20 @@ If data is missing, best-guess typical values. Description: ${mealDescription.tr
                                                 />
                                             );
                                         })}
+
+                                        {userPreferences?.daily_protein_goal &&
+                                            userPreferences.daily_protein_goal > 0 &&
+                                            maxTrendProtein > 0 && (
+                                                <line
+                                                    x1='0%'
+                                                    y1={`${10 + (85 - (userPreferences.daily_protein_goal / maxTrendProtein) * 85)}%`}
+                                                    x2='100%'
+                                                    y2={`${10 + (85 - (userPreferences.daily_protein_goal / maxTrendProtein) * 85)}%`}
+                                                    stroke='#9ca3af'
+                                                    strokeWidth='2'
+                                                    strokeDasharray='5,5'
+                                                />
+                                            )}
                                     </svg>
                                 </div>
                                 <div className='flex justify-between mt-3'>
@@ -1615,6 +1670,20 @@ If data is missing, best-guess typical values. Description: ${mealDescription.tr
                                                 />
                                             );
                                         })}
+
+                                        {userPreferences?.daily_carbs_goal &&
+                                            userPreferences.daily_carbs_goal > 0 &&
+                                            maxTrendCarbs > 0 && (
+                                                <line
+                                                    x1='0%'
+                                                    y1={`${10 + (85 - (userPreferences.daily_carbs_goal / maxTrendCarbs) * 85)}%`}
+                                                    x2='100%'
+                                                    y2={`${10 + (85 - (userPreferences.daily_carbs_goal / maxTrendCarbs) * 85)}%`}
+                                                    stroke='#9ca3af'
+                                                    strokeWidth='2'
+                                                    strokeDasharray='5,5'
+                                                />
+                                            )}
                                     </svg>
                                 </div>
                                 <div className='flex justify-between mt-3'>
@@ -1702,6 +1771,20 @@ If data is missing, best-guess typical values. Description: ${mealDescription.tr
                                                 />
                                             );
                                         })}
+
+                                        {userPreferences?.daily_fats_goal &&
+                                            userPreferences.daily_fats_goal > 0 &&
+                                            maxTrendFats > 0 && (
+                                                <line
+                                                    x1='0%'
+                                                    y1={`${10 + (85 - (userPreferences.daily_fats_goal / maxTrendFats) * 85)}%`}
+                                                    x2='100%'
+                                                    y2={`${10 + (85 - (userPreferences.daily_fats_goal / maxTrendFats) * 85)}%`}
+                                                    stroke='#9ca3af'
+                                                    strokeWidth='2'
+                                                    strokeDasharray='5,5'
+                                                />
+                                            )}
                                     </svg>
                                 </div>
                                 <div className='flex justify-between mt-3'>
@@ -1727,6 +1810,16 @@ If data is missing, best-guess typical values. Description: ${mealDescription.tr
                     </>
                 )}
             </div>
+
+            <SettingsModal
+                isOpen={showSettings}
+                onClose={() => setShowSettings(false)}
+                userPreferences={userPreferences}
+                userId={user?.id || ''}
+                onSave={preferences => {
+                    setUserPreferences(preferences);
+                }}
+            />
         </div>
     );
 }
