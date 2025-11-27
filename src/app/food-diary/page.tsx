@@ -23,6 +23,9 @@ import {
 interface TrendPoint {
     date: string;
     calories: number;
+    protein: number;
+    carbs: number;
+    fats: number;
 }
 
 type IconProps = React.SVGProps<SVGSVGElement>;
@@ -449,14 +452,29 @@ export default function FoodDiaryPage() {
         const trend = dailyTotals.map(total => ({
             date: formatDateKey(new Date(total.meal_day)),
             calories: total.total_calories ?? 0,
+            protein: total.total_protein ?? 0,
+            carbs: total.total_carbs ?? 0,
+            fats: total.total_fats ?? 0,
         }));
 
         Object.entries(computedTotalsByDay).forEach(([day, totals]) => {
             const existingIndex = trend.findIndex(point => point.date === day);
             if (existingIndex >= 0) {
-                trend[existingIndex] = { date: day, calories: totals.total_calories ?? 0 };
+                trend[existingIndex] = {
+                    date: day,
+                    calories: totals.total_calories ?? 0,
+                    protein: totals.total_protein ?? 0,
+                    carbs: totals.total_carbs ?? 0,
+                    fats: totals.total_fats ?? 0,
+                };
             } else {
-                trend.push({ date: day, calories: totals.total_calories ?? 0 });
+                trend.push({
+                    date: day,
+                    calories: totals.total_calories ?? 0,
+                    protein: totals.total_protein ?? 0,
+                    carbs: totals.total_carbs ?? 0,
+                    fats: totals.total_fats ?? 0,
+                });
             }
         });
 
@@ -465,6 +483,18 @@ export default function FoodDiaryPage() {
 
     const maxTrendCalories = useMemo(() => {
         return dailyTrend.length > 0 ? Math.max(...dailyTrend.map(point => point.calories)) : 0;
+    }, [dailyTrend]);
+
+    const maxTrendProtein = useMemo(() => {
+        return dailyTrend.length > 0 ? Math.max(...dailyTrend.map(point => point.protein)) : 0;
+    }, [dailyTrend]);
+
+    const maxTrendCarbs = useMemo(() => {
+        return dailyTrend.length > 0 ? Math.max(...dailyTrend.map(point => point.carbs)) : 0;
+    }, [dailyTrend]);
+
+    const maxTrendFats = useMemo(() => {
+        return dailyTrend.length > 0 ? Math.max(...dailyTrend.map(point => point.fats)) : 0;
     }, [dailyTrend]);
 
     const calendarDays = useMemo(() => {
@@ -1250,91 +1280,365 @@ If data is missing, best-guess typical values. Description: ${mealDescription.tr
                 </div>
 
                 {dailyTrend.length > 0 && (
-                    <div className='bg-slate-700 rounded-lg p-4 sm:p-6 mb-6'>
-                        <h3 className='text-lg font-semibold text-white mb-4 flex items-center'>
-                            🔥 Daily Calories Trend
-                        </h3>
-                        <div className='bg-slate-800 rounded-lg pb-2'>
-                            <div className='relative h-32 sm:h-40'>
-                                <svg
-                                    className='absolute inset-0 w-full h-full'
-                                    style={{ zIndex: 10, overflow: 'visible' }}
-                                >
-                                    {dailyTrend.map((point, index) => {
-                                        if (index === 0) return null;
-                                        const prevPoint = dailyTrend[index - 1];
-                                        const barWidth = 100 / dailyTrend.length;
-                                        const prevX = (index - 1) * barWidth + barWidth / 2;
-                                        const currentX = index * barWidth + barWidth / 2;
-                                        const topPadding = 10;
-                                        const chartHeight = 85;
-                                        const prevHeight =
-                                            maxTrendCalories > 0
-                                                ? (prevPoint.calories / maxTrendCalories) * chartHeight
-                                                : 0;
-                                        const currentHeight =
-                                            maxTrendCalories > 0
-                                                ? (point.calories / maxTrendCalories) * chartHeight
-                                                : 0;
-                                        const prevY = topPadding + (chartHeight - prevHeight);
-                                        const currentY = topPadding + (chartHeight - currentHeight);
+                    <>
+                        <div className='bg-slate-700 rounded-lg p-4 sm:p-6 mb-6'>
+                            <h3 className='text-lg font-semibold text-white mb-4 flex items-center'>
+                                🔥 Daily Calories Trend
+                            </h3>
+                            <div className='bg-slate-800 rounded-lg pb-2'>
+                                <div className='relative h-32 sm:h-40'>
+                                    <svg
+                                        className='absolute inset-0 w-full h-full'
+                                        style={{ zIndex: 10, overflow: 'visible' }}
+                                    >
+                                        {dailyTrend.map((point, index) => {
+                                            if (index === 0) return null;
+                                            const prevPoint = dailyTrend[index - 1];
+                                            const barWidth = 100 / dailyTrend.length;
+                                            const prevX = (index - 1) * barWidth + barWidth / 2;
+                                            const currentX = index * barWidth + barWidth / 2;
+                                            const topPadding = 10;
+                                            const chartHeight = 85;
+                                            const prevHeight =
+                                                maxTrendCalories > 0
+                                                    ? (prevPoint.calories / maxTrendCalories) * chartHeight
+                                                    : 0;
+                                            const currentHeight =
+                                                maxTrendCalories > 0
+                                                    ? (point.calories / maxTrendCalories) * chartHeight
+                                                    : 0;
+                                            const prevY = topPadding + (chartHeight - prevHeight);
+                                            const currentY = topPadding + (chartHeight - currentHeight);
 
+                                            return (
+                                                <line
+                                                    key={`cal-line-${index}`}
+                                                    x1={`${prevX}%`}
+                                                    y1={`${prevY}%`}
+                                                    x2={`${currentX}%`}
+                                                    y2={`${currentY}%`}
+                                                    stroke='#f97316'
+                                                    strokeWidth='3'
+                                                    strokeLinecap='round'
+                                                />
+                                            );
+                                        })}
+
+                                        {dailyTrend.map((point, index) => {
+                                            const barWidth = 100 / dailyTrend.length;
+                                            const x = index * barWidth + barWidth / 2;
+                                            const topPadding = 10;
+                                            const chartHeight = 85;
+                                            const height =
+                                                maxTrendCalories > 0
+                                                    ? (point.calories / maxTrendCalories) * chartHeight
+                                                    : 0;
+                                            const y = topPadding + (chartHeight - height);
+                                            const isToday = formatDateKey(new Date()) === point.date;
+
+                                            return (
+                                                <circle
+                                                    key={`cal-point-${index}`}
+                                                    cx={`${x}%`}
+                                                    cy={`${y}%`}
+                                                    r={isToday ? '6' : '4'}
+                                                    fill='#f97316'
+                                                    stroke={isToday ? '#ffffff' : '#1e293b'}
+                                                    strokeWidth={isToday ? '3' : '2'}
+                                                    className={isToday ? 'animate-pulse' : ''}
+                                                />
+                                            );
+                                        })}
+                                    </svg>
+                                </div>
+                                <div className='flex justify-between mt-3'>
+                                    {dailyTrend.map(point => {
+                                        const trendDate = new Date(point.date);
+                                        const label = trendDate.toLocaleDateString(undefined, {
+                                            month: 'short',
+                                            day: 'numeric',
+                                        });
                                         return (
-                                            <line
-                                                key={`cal-line-${index}`}
-                                                x1={`${prevX}%`}
-                                                y1={`${prevY}%`}
-                                                x2={`${currentX}%`}
-                                                y2={`${currentY}%`}
-                                                stroke='#f97316'
-                                                strokeWidth='3'
-                                                strokeLinecap='round'
-                                            />
+                                            <div
+                                                key={point.date}
+                                                className='flex flex-col items-center flex-1 text-center'
+                                            >
+                                                <div className='text-xs font-medium text-white mb-1'>
+                                                    {point.calories}
+                                                </div>
+                                                <div className='text-xs text-slate-300'>{label}</div>
+                                            </div>
                                         );
                                     })}
-
-                                    {dailyTrend.map((point, index) => {
-                                        const barWidth = 100 / dailyTrend.length;
-                                        const x = index * barWidth + barWidth / 2;
-                                        const topPadding = 10;
-                                        const chartHeight = 85;
-                                        const height =
-                                            maxTrendCalories > 0
-                                                ? (point.calories / maxTrendCalories) * chartHeight
-                                                : 0;
-                                        const y = topPadding + (chartHeight - height);
-
-                                        return (
-                                            <circle
-                                                key={`cal-point-${index}`}
-                                                cx={`${x}%`}
-                                                cy={`${y}%`}
-                                                r='4'
-                                                fill='#f97316'
-                                                stroke='#1e293b'
-                                                strokeWidth='2'
-                                            />
-                                        );
-                                    })}
-                                </svg>
-                            </div>
-                            <div className='flex justify-between mt-3'>
-                                {dailyTrend.map(point => {
-                                    const trendDate = new Date(point.date);
-                                    const label = trendDate.toLocaleDateString(undefined, {
-                                        month: 'short',
-                                        day: 'numeric',
-                                    });
-                                    return (
-                                        <div key={point.date} className='flex flex-col items-center flex-1 text-center'>
-                                            <div className='text-xs font-medium text-white mb-1'>{point.calories}</div>
-                                            <div className='text-xs text-slate-300'>{label}</div>
-                                        </div>
-                                    );
-                                })}
+                                </div>
                             </div>
                         </div>
-                    </div>
+
+                        <div className='bg-slate-700 rounded-lg p-4 sm:p-6 mb-6'>
+                            <h3 className='text-lg font-semibold text-white mb-4 flex items-center'>
+                                💪 Daily Protein Trend
+                            </h3>
+                            <div className='bg-slate-800 rounded-lg pb-2'>
+                                <div className='relative h-32 sm:h-40'>
+                                    <svg
+                                        className='absolute inset-0 w-full h-full'
+                                        style={{ zIndex: 10, overflow: 'visible' }}
+                                    >
+                                        {dailyTrend.map((point, index) => {
+                                            if (index === 0) return null;
+                                            const prevPoint = dailyTrend[index - 1];
+                                            const barWidth = 100 / dailyTrend.length;
+                                            const prevX = (index - 1) * barWidth + barWidth / 2;
+                                            const currentX = index * barWidth + barWidth / 2;
+                                            const topPadding = 10;
+                                            const chartHeight = 85;
+                                            const prevHeight =
+                                                maxTrendProtein > 0
+                                                    ? (prevPoint.protein / maxTrendProtein) * chartHeight
+                                                    : 0;
+                                            const currentHeight =
+                                                maxTrendProtein > 0
+                                                    ? (point.protein / maxTrendProtein) * chartHeight
+                                                    : 0;
+                                            const prevY = topPadding + (chartHeight - prevHeight);
+                                            const currentY = topPadding + (chartHeight - currentHeight);
+
+                                            return (
+                                                <line
+                                                    key={`protein-line-${index}`}
+                                                    x1={`${prevX}%`}
+                                                    y1={`${prevY}%`}
+                                                    x2={`${currentX}%`}
+                                                    y2={`${currentY}%`}
+                                                    stroke='#22c55e'
+                                                    strokeWidth='3'
+                                                    strokeLinecap='round'
+                                                />
+                                            );
+                                        })}
+
+                                        {dailyTrend.map((point, index) => {
+                                            const barWidth = 100 / dailyTrend.length;
+                                            const x = index * barWidth + barWidth / 2;
+                                            const topPadding = 10;
+                                            const chartHeight = 85;
+                                            const height =
+                                                maxTrendProtein > 0
+                                                    ? (point.protein / maxTrendProtein) * chartHeight
+                                                    : 0;
+                                            const y = topPadding + (chartHeight - height);
+                                            const isToday = formatDateKey(new Date()) === point.date;
+
+                                            return (
+                                                <circle
+                                                    key={`protein-point-${index}`}
+                                                    cx={`${x}%`}
+                                                    cy={`${y}%`}
+                                                    r={isToday ? '6' : '4'}
+                                                    fill='#22c55e'
+                                                    stroke={isToday ? '#ffffff' : '#1e293b'}
+                                                    strokeWidth={isToday ? '3' : '2'}
+                                                    className={isToday ? 'animate-pulse' : ''}
+                                                />
+                                            );
+                                        })}
+                                    </svg>
+                                </div>
+                                <div className='flex justify-between mt-3'>
+                                    {dailyTrend.map(point => {
+                                        const trendDate = new Date(point.date);
+                                        const label = trendDate.toLocaleDateString(undefined, {
+                                            month: 'short',
+                                            day: 'numeric',
+                                        });
+                                        return (
+                                            <div
+                                                key={point.date}
+                                                className='flex flex-col items-center flex-1 text-center'
+                                            >
+                                                <div className='text-xs font-medium text-white mb-1'>
+                                                    {point.protein}g
+                                                </div>
+                                                <div className='text-xs text-slate-300'>{label}</div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className='bg-slate-700 rounded-lg p-4 sm:p-6 mb-6'>
+                            <h3 className='text-lg font-semibold text-white mb-4 flex items-center'>
+                                🍞 Daily Carbs Trend
+                            </h3>
+                            <div className='bg-slate-800 rounded-lg pb-2'>
+                                <div className='relative h-32 sm:h-40'>
+                                    <svg
+                                        className='absolute inset-0 w-full h-full'
+                                        style={{ zIndex: 10, overflow: 'visible' }}
+                                    >
+                                        {dailyTrend.map((point, index) => {
+                                            if (index === 0) return null;
+                                            const prevPoint = dailyTrend[index - 1];
+                                            const barWidth = 100 / dailyTrend.length;
+                                            const prevX = (index - 1) * barWidth + barWidth / 2;
+                                            const currentX = index * barWidth + barWidth / 2;
+                                            const topPadding = 10;
+                                            const chartHeight = 85;
+                                            const prevHeight =
+                                                maxTrendCarbs > 0 ? (prevPoint.carbs / maxTrendCarbs) * chartHeight : 0;
+                                            const currentHeight =
+                                                maxTrendCarbs > 0 ? (point.carbs / maxTrendCarbs) * chartHeight : 0;
+                                            const prevY = topPadding + (chartHeight - prevHeight);
+                                            const currentY = topPadding + (chartHeight - currentHeight);
+
+                                            return (
+                                                <line
+                                                    key={`carbs-line-${index}`}
+                                                    x1={`${prevX}%`}
+                                                    y1={`${prevY}%`}
+                                                    x2={`${currentX}%`}
+                                                    y2={`${currentY}%`}
+                                                    stroke='#d4a574'
+                                                    strokeWidth='3'
+                                                    strokeLinecap='round'
+                                                />
+                                            );
+                                        })}
+
+                                        {dailyTrend.map((point, index) => {
+                                            const barWidth = 100 / dailyTrend.length;
+                                            const x = index * barWidth + barWidth / 2;
+                                            const topPadding = 10;
+                                            const chartHeight = 85;
+                                            const height =
+                                                maxTrendCarbs > 0 ? (point.carbs / maxTrendCarbs) * chartHeight : 0;
+                                            const y = topPadding + (chartHeight - height);
+                                            const isToday = formatDateKey(new Date()) === point.date;
+
+                                            return (
+                                                <circle
+                                                    key={`carbs-point-${index}`}
+                                                    cx={`${x}%`}
+                                                    cy={`${y}%`}
+                                                    r={isToday ? '6' : '4'}
+                                                    fill='#d4a574'
+                                                    stroke={isToday ? '#ffffff' : '#1e293b'}
+                                                    strokeWidth={isToday ? '3' : '2'}
+                                                    className={isToday ? 'animate-pulse' : ''}
+                                                />
+                                            );
+                                        })}
+                                    </svg>
+                                </div>
+                                <div className='flex justify-between mt-3'>
+                                    {dailyTrend.map(point => {
+                                        const trendDate = new Date(point.date);
+                                        const label = trendDate.toLocaleDateString(undefined, {
+                                            month: 'short',
+                                            day: 'numeric',
+                                        });
+                                        return (
+                                            <div
+                                                key={point.date}
+                                                className='flex flex-col items-center flex-1 text-center'
+                                            >
+                                                <div className='text-xs font-medium text-white mb-1'>
+                                                    {point.carbs}g
+                                                </div>
+                                                <div className='text-xs text-slate-300'>{label}</div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className='bg-slate-700 rounded-lg p-4 sm:p-6 mb-6'>
+                            <h3 className='text-lg font-semibold text-white mb-4 flex items-center'>
+                                🧈 Daily Fats Trend
+                            </h3>
+                            <div className='bg-slate-800 rounded-lg pb-2'>
+                                <div className='relative h-32 sm:h-40'>
+                                    <svg
+                                        className='absolute inset-0 w-full h-full'
+                                        style={{ zIndex: 10, overflow: 'visible' }}
+                                    >
+                                        {dailyTrend.map((point, index) => {
+                                            if (index === 0) return null;
+                                            const prevPoint = dailyTrend[index - 1];
+                                            const barWidth = 100 / dailyTrend.length;
+                                            const prevX = (index - 1) * barWidth + barWidth / 2;
+                                            const currentX = index * barWidth + barWidth / 2;
+                                            const topPadding = 10;
+                                            const chartHeight = 85;
+                                            const prevHeight =
+                                                maxTrendFats > 0 ? (prevPoint.fats / maxTrendFats) * chartHeight : 0;
+                                            const currentHeight =
+                                                maxTrendFats > 0 ? (point.fats / maxTrendFats) * chartHeight : 0;
+                                            const prevY = topPadding + (chartHeight - prevHeight);
+                                            const currentY = topPadding + (chartHeight - currentHeight);
+
+                                            return (
+                                                <line
+                                                    key={`fats-line-${index}`}
+                                                    x1={`${prevX}%`}
+                                                    y1={`${prevY}%`}
+                                                    x2={`${currentX}%`}
+                                                    y2={`${currentY}%`}
+                                                    stroke='#eab308'
+                                                    strokeWidth='3'
+                                                    strokeLinecap='round'
+                                                />
+                                            );
+                                        })}
+
+                                        {dailyTrend.map((point, index) => {
+                                            const barWidth = 100 / dailyTrend.length;
+                                            const x = index * barWidth + barWidth / 2;
+                                            const topPadding = 10;
+                                            const chartHeight = 85;
+                                            const height =
+                                                maxTrendFats > 0 ? (point.fats / maxTrendFats) * chartHeight : 0;
+                                            const y = topPadding + (chartHeight - height);
+                                            const isToday = formatDateKey(new Date()) === point.date;
+
+                                            return (
+                                                <circle
+                                                    key={`fats-point-${index}`}
+                                                    cx={`${x}%`}
+                                                    cy={`${y}%`}
+                                                    r={isToday ? '6' : '4'}
+                                                    fill='#eab308'
+                                                    stroke={isToday ? '#ffffff' : '#1e293b'}
+                                                    strokeWidth={isToday ? '3' : '2'}
+                                                    className={isToday ? 'animate-pulse' : ''}
+                                                />
+                                            );
+                                        })}
+                                    </svg>
+                                </div>
+                                <div className='flex justify-between mt-3'>
+                                    {dailyTrend.map(point => {
+                                        const trendDate = new Date(point.date);
+                                        const label = trendDate.toLocaleDateString(undefined, {
+                                            month: 'short',
+                                            day: 'numeric',
+                                        });
+                                        return (
+                                            <div
+                                                key={point.date}
+                                                className='flex flex-col items-center flex-1 text-center'
+                                            >
+                                                <div className='text-xs font-medium text-white mb-1'>{point.fats}g</div>
+                                                <div className='text-xs text-slate-300'>{label}</div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        </div>
+                    </>
                 )}
             </div>
         </div>
