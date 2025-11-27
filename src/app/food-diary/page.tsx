@@ -235,6 +235,13 @@ function combineDateAndTime(date: Date, time: string): string {
     return combined.toISOString();
 }
 
+// Macro colors for consistent styling across graphs and statistics
+const MACRO_COLORS = {
+    protein: '#22c55e', // Green
+    carbs: '#d4a574', // Beige/tan (bread color)
+    fats: '#eab308', // Yellow
+} as const;
+
 export default function FoodDiaryPage() {
     const [user, setUser] = useState<User | null>(null);
     const [meals, setMeals] = useState<Meal[]>([]);
@@ -440,13 +447,54 @@ export default function FoodDiaryPage() {
         });
     }, [selectedDate]);
 
-    const weeklyCalories = useMemo(() => {
-        return currentWeek.reduce((acc, date) => {
-            const key = formatDateKey(date);
-            const totals = totalsByDay[key];
-            return acc + (totals?.total_calories ?? 0);
-        }, 0);
-    }, [currentWeek, totalsByDay]);
+    const weeklyAverages = useMemo(() => {
+        // Get the last 7 days (excluding today)
+        const last7Days: Date[] = [];
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        for (let i = 1; i <= 7; i += 1) {
+            const date = new Date(today);
+            date.setDate(today.getDate() - i);
+            last7Days.push(date);
+        }
+
+        let daysWithData = 0;
+        const totals = last7Days.reduce(
+            (acc, date) => {
+                const key = formatDateKey(date);
+                const dayTotals = totalsByDay[key];
+                const dayCalories = dayTotals?.total_calories ?? 0;
+                // Only count days that have meals logged (calories > 0)
+                if (dayCalories > 0) {
+                    daysWithData += 1;
+                }
+                return {
+                    calories: acc.calories + dayCalories,
+                    protein: acc.protein + (dayTotals?.total_protein ?? 0),
+                    carbs: acc.carbs + (dayTotals?.total_carbs ?? 0),
+                    fats: acc.fats + (dayTotals?.total_fats ?? 0),
+                };
+            },
+            { calories: 0, protein: 0, carbs: 0, fats: 0 }
+        );
+
+        // Only divide by days that actually have data
+        if (daysWithData === 0) {
+            return {
+                avgCalories: 0,
+                avgProtein: 0,
+                avgCarbs: 0,
+                avgFats: 0,
+            };
+        }
+
+        return {
+            avgCalories: Math.round(totals.calories / daysWithData),
+            avgProtein: Math.round(totals.protein / daysWithData),
+            avgCarbs: Math.round(totals.carbs / daysWithData),
+            avgFats: Math.round(totals.fats / daysWithData),
+        };
+    }, [totalsByDay]);
 
     const dailyTrend: TrendPoint[] = useMemo(() => {
         const trend = dailyTotals.map(total => ({
@@ -1116,24 +1164,62 @@ If data is missing, best-guess typical values. Description: ${mealDescription.tr
                     {saveTemplateError && <div className='mt-2 text-sm text-red-300'>{saveTemplateError}</div>}
                 </div>
 
-                <div className='grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-6'>
-                    <div className='bg-slate-700 rounded-lg p-4 text-center'>
-                        <h3 className='text-sm sm:text-base font-semibold text-white mb-1'>Calories today</h3>
-                        <p className='text-2xl sm:text-3xl font-bold text-orange-400'>
-                            {totalsForSelectedDay?.total_calories ?? 0}
-                        </p>
+                <div className='space-y-3 sm:space-y-4 mb-6'>
+                    <div className='grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4'>
+                        <div className='bg-slate-700 rounded-lg p-4 text-center'>
+                            <h3 className='text-sm sm:text-base font-semibold text-white mb-1'>
+                                Weekly average calories
+                            </h3>
+                            <p className='text-2xl sm:text-3xl font-bold text-blue-400'>{weeklyAverages.avgCalories}</p>
+                        </div>
+                        <div className='bg-slate-700 rounded-lg p-4 text-center'>
+                            <h3 className='text-sm sm:text-base font-semibold text-white mb-1'>
+                                Weekly average macros
+                            </h3>
+                            <p className='text-lg sm:text-xl font-semibold'>
+                                <span style={{ color: MACRO_COLORS.protein }}>{weeklyAverages.avgProtein}g</span>
+                                {' / '}
+                                <span style={{ color: MACRO_COLORS.carbs }}>{weeklyAverages.avgCarbs}g</span>
+                                {' / '}
+                                <span style={{ color: MACRO_COLORS.fats }}>{weeklyAverages.avgFats}g</span>
+                            </p>
+                        </div>
                     </div>
-                    <div className='bg-slate-700 rounded-lg p-4 text-center'>
-                        <h3 className='text-sm sm:text-base font-semibold text-white mb-1'>Current week calories</h3>
-                        <p className='text-2xl sm:text-3xl font-bold text-blue-400'>{weeklyCalories}</p>
-                    </div>
-                    <div className='bg-slate-700 rounded-lg p-4 text-center'>
-                        <h3 className='text-sm sm:text-base font-semibold text-white mb-1'>Protein / Carbs / Fats</h3>
-                        <p className='text-lg sm:text-xl font-semibold text-green-300'>
-                            {totalsForSelectedDay
-                                ? `${totalsForSelectedDay.total_protein}g / ${totalsForSelectedDay.total_carbs}g / ${totalsForSelectedDay.total_fats}g`
-                                : '0g / 0g / 0g'}
-                        </p>
+                    <div className='grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4'>
+                        <div className='bg-slate-700 rounded-lg p-4 text-center'>
+                            <h3 className='text-sm sm:text-base font-semibold text-white mb-1'>Calories today</h3>
+                            <p className='text-2xl sm:text-3xl font-bold text-orange-400'>
+                                {totalsForSelectedDay?.total_calories ?? 0}
+                            </p>
+                        </div>
+                        <div className='bg-slate-700 rounded-lg p-4 text-center'>
+                            <h3 className='text-sm sm:text-base font-semibold text-white mb-1'>Today&apos;s macros</h3>
+                            <p className='text-lg sm:text-xl font-semibold'>
+                                {totalsForSelectedDay ? (
+                                    <>
+                                        <span style={{ color: MACRO_COLORS.protein }}>
+                                            {totalsForSelectedDay.total_protein}g
+                                        </span>
+                                        {' / '}
+                                        <span style={{ color: MACRO_COLORS.carbs }}>
+                                            {totalsForSelectedDay.total_carbs}g
+                                        </span>
+                                        {' / '}
+                                        <span style={{ color: MACRO_COLORS.fats }}>
+                                            {totalsForSelectedDay.total_fats}g
+                                        </span>
+                                    </>
+                                ) : (
+                                    <>
+                                        <span style={{ color: MACRO_COLORS.protein }}>0g</span>
+                                        {' / '}
+                                        <span style={{ color: MACRO_COLORS.carbs }}>0g</span>
+                                        {' / '}
+                                        <span style={{ color: MACRO_COLORS.fats }}>0g</span>
+                                    </>
+                                )}
+                            </p>
+                        </div>
                     </div>
                 </div>
 
@@ -1410,7 +1496,7 @@ If data is missing, best-guess typical values. Description: ${mealDescription.tr
                                                     y1={`${prevY}%`}
                                                     x2={`${currentX}%`}
                                                     y2={`${currentY}%`}
-                                                    stroke='#22c55e'
+                                                    stroke={MACRO_COLORS.protein}
                                                     strokeWidth='3'
                                                     strokeLinecap='round'
                                                 />
@@ -1435,7 +1521,7 @@ If data is missing, best-guess typical values. Description: ${mealDescription.tr
                                                     cx={`${x}%`}
                                                     cy={`${y}%`}
                                                     r={isToday ? '6' : '4'}
-                                                    fill='#22c55e'
+                                                    fill={MACRO_COLORS.protein}
                                                     stroke={isToday ? '#ffffff' : '#1e293b'}
                                                     strokeWidth={isToday ? '3' : '2'}
                                                     className={isToday ? 'animate-pulse' : ''}
@@ -1499,7 +1585,7 @@ If data is missing, best-guess typical values. Description: ${mealDescription.tr
                                                     y1={`${prevY}%`}
                                                     x2={`${currentX}%`}
                                                     y2={`${currentY}%`}
-                                                    stroke='#d4a574'
+                                                    stroke={MACRO_COLORS.carbs}
                                                     strokeWidth='3'
                                                     strokeLinecap='round'
                                                 />
@@ -1522,7 +1608,7 @@ If data is missing, best-guess typical values. Description: ${mealDescription.tr
                                                     cx={`${x}%`}
                                                     cy={`${y}%`}
                                                     r={isToday ? '6' : '4'}
-                                                    fill='#d4a574'
+                                                    fill={MACRO_COLORS.carbs}
                                                     stroke={isToday ? '#ffffff' : '#1e293b'}
                                                     strokeWidth={isToday ? '3' : '2'}
                                                     className={isToday ? 'animate-pulse' : ''}
@@ -1586,7 +1672,7 @@ If data is missing, best-guess typical values. Description: ${mealDescription.tr
                                                     y1={`${prevY}%`}
                                                     x2={`${currentX}%`}
                                                     y2={`${currentY}%`}
-                                                    stroke='#eab308'
+                                                    stroke={MACRO_COLORS.fats}
                                                     strokeWidth='3'
                                                     strokeLinecap='round'
                                                 />
@@ -1609,7 +1695,7 @@ If data is missing, best-guess typical values. Description: ${mealDescription.tr
                                                     cx={`${x}%`}
                                                     cy={`${y}%`}
                                                     r={isToday ? '6' : '4'}
-                                                    fill='#eab308'
+                                                    fill={MACRO_COLORS.fats}
                                                     stroke={isToday ? '#ffffff' : '#1e293b'}
                                                     strokeWidth={isToday ? '3' : '2'}
                                                     className={isToday ? 'animate-pulse' : ''}
